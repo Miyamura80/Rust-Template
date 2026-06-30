@@ -114,15 +114,26 @@ Replace the untyped `fn(Value, &AppContext) -> Result<Value, CommandError>`
 with a typed trait so every transport gets schemas for free.
 
 ```
+#[async_trait]
 trait Command {
-    type Input:  DeserializeOwned + JsonSchema;
+    // ONE struct drives the CLI flags, the API request body, and the MCP schema:
+    type Input:  DeserializeOwned + JsonSchema + clap::Args;
     type Output: Serialize + JsonSchema;
     fn name(&self) -> &'static str;
     fn description(&self) -> &'static str;
-    fn run(&self, input: Self::Input, ctx: &AppContext)
+    fn expose(&self) -> Expose { Expose::all() }   // per-transport visibility
+    async fn run(&self, input: Self::Input, cx: &Ctx)
         -> Result<Self::Output, CommandError>;
 }
 ```
+
+- **Async** (`async-trait`): the registry, probes, and any network/DB/LLM work
+  are async; the HTTP server is async end-to-end. The current sync
+  `fn(Value,&AppContext)->Result` handler type is replaced.
+- **One input struct, three consumers**: `#[derive(clap::Args, Deserialize,
+  JsonSchema)]` on the input type means CLI flags, the API body schema, and the
+  MCP tool schema all come from a single definition (no drift). Commands needing
+  bespoke CLI UX can still hand-write a clap command and call the service.
 
 - The registry stores **type-erased** entries (an object-safe inner trait that
   takes/returns `serde_json::Value`, with deserialize→run→serialize wrapped
@@ -131,10 +142,35 @@ trait Command {
 - Each entry carries **per-transport visibility** flags (mirrors the reference's
   MCP exclusion set), e.g. `expose: { api: true, mcp: false }`, so CLI-only
   utility commands don't leak into the API/MCP tool surface.
-- `CommandResult` (the stable envelope: run_id, status, timing, error, data)
-  is unchanged — typed output is serialized into its `data` field.
 - New introspection: `registry.schema(name) -> { input_schema, output_schema }`,
   consumed by the API (`GET /commands`, OpenAPI) and the future MCP `tools/list`.
+
+### Output contract: bare output for API/MCP, envelope for CLI
+
+The HTTP/MCP body is the **bare `Output`** type (clean, idiomatic schemas the
+LLM/OpenAPI can consume directly). The rich `CommandResult` envelope (run_id,
+status, timing, error, env_summary) is retained for the **CLI and scenario
+runner**, where the diagnostics are the point. `run_id`/timing ride along on the
+HTTP path as response headers (e.g. `x-run-id`), not in the body.
+
+```
+CLI  : appctl call greet … → CommandResult { run_id, status, timing, data:{…}, … }
+HTTP : POST /api/v1/commands/greet → 200 { "message": "...", "times": 1 }   (bare Output)
+       errors → HTTP status (from CommandError::error_code()) + problem body
+```
+
+### Per-request context (`Ctx`), no identity yet
+
+Drop the process-global context singleton. Capabilities (fs/net) and config are
+shared (`Arc`); a lightweight **`Ctx` is constructed per request/invocation**
+carrying `request_id` and a deadline. This is the seam for future auth — but we
+add **no `user_id`/identity field now** (auth is explicitly undecided). Adding it
+later is a field on `Ctx` + middleware, not a signature break.
+
+```
+   shared (Arc):   capabilities (fs/net) + config        ← built once
+   per request:    Ctx { request_id, deadline }          ← built per call, passed to run()
+```
 
 ### 4.1 Transport split (mirrors the reference)
 
@@ -151,23 +187,37 @@ New deps: `schemars` (engine), `clap` already present.
 ## 5. HTTP API (axum)
 
 Replace the Unix-socket daemon (`crates/cli/src/serve.rs`) with axum routes
-reusing the same registry and `CommandResult` envelope:
+that loop the registry (auto-derived, mirroring the reference). **Versioned from
+day one** under `/api/v1`:
 
 ```
-GET  /healthz                  → liveness
-GET  /commands                 → list + JSON Schemas (introspection)
-POST /commands/:name           → run command; body = Input JSON; resp = CommandResult
-POST /probe/:target            → run probe        (filesystem|network|clipboard)
-GET  /doctor                   → env report
+GET  /healthz                      → liveness (unversioned)
+GET  /api/v1/commands              → list + JSON Schemas (introspection)
+POST /api/v1/commands/:name        → run command; body = Input JSON; resp = bare Output
+POST /api/v1/probe/:target         → run probe (network | filesystem)
+GET  /api/v1/doctor                → env report
+       (future)  /mcp              → mounted MCP sub-router (rmcp), same process
 ```
 
-- tower middleware: CORS (for the frontend), tracing, request-id, timeout.
-- Keep the daemon's request/response shapes available if a non-HTTP transport
-  is still wanted; otherwise retire `DaemonRequest`/`DaemonResponse`.
+- Response body is the **bare `Output`**; `run_id`/timing in `x-run-id` etc.
+- tower middleware: CORS (frontend), tracing, request-id, timeout. This is the
+  seam where auth/rate-limit slot in later — never in `engine`.
 - Error mapping: `CommandError::error_code()` → HTTP status (InvalidInput→400,
-  PermissionDenied→403, IoError→500, etc.), body still a `CommandResult`.
+  PermissionDenied→403, NetworkError→502, IoError→500, …) + a small problem body.
+- `serve` is structured so a `/mcp` sub-router can be mounted later without
+  reshaping the app (reference mounts FastMCP on FastAPI the same way).
+- Bind host/port from config; graceful shutdown on SIGTERM/SIGINT (tokio signal).
+- Retire `DaemonRequest`/`DaemonResponse` (UDS daemon) unless a non-HTTP
+  transport is still wanted.
 
-New deps (cli): `axum`, `tower`, `tower-http` (cors, trace).
+New deps (cli): `axum`, `tower`, `tower-http` (cors, trace), `async-trait`.
+
+### 5.1 API integration tests
+
+Add an HTTP-level test layer using axum's `tower::ServiceExt::oneshot` (in-process,
+no socket): assert status codes, the bare-output schema, error mapping, and that
+no secret config field ever serializes over the wire. The existing `run-scenario`
+YAML harness can additionally be pointed at the HTTP API for end-to-end checks.
 
 ## 6. Config relocation
 
@@ -175,7 +225,9 @@ Move `src-tauri/src/global_config.rs` + `global_config.yaml` into
 `crates/config`:
 - Keep the `AppConfig` (full, with secret API keys) vs `FrontendConfig`
   (sanitized) split — the sanitizer is reused for any payload the API exposes
-  to the frontend.
+  to the frontend. **This is now a security boundary**: it used to feed a
+  bundled webview over IPC; it will now serve over HTTP to a browser. Add a test
+  asserting no secret field ever serializes, and exercise it in 5.1.
 - Fix the loader's path logic: it currently falls back to a hard-coded
   `src-tauri/` prefix. Re-anchor to the config crate's `CARGO_MANIFEST_DIR` /
   a configurable base path / `APP_CONFIG_PATH` env.
@@ -187,9 +239,9 @@ Move `src-tauri/src/global_config.rs` + `global_config.yaml` into
 - Move `src/` → `frontend/`. Remove `@tauri-apps/api`, `-plugin-opener`,
   `-plugin-updater`, `-plugin-process`; delete `UpdateNotification` and the
   tauri update hook.
-- Replace `invoke('engine_call', …)` with `fetch('/commands/:name', …)`; add a
-  tiny typed API client. `useConfig()` calls `GET` a config endpoint instead of
-  the tauri `get_app_config` command.
+- Replace `invoke('engine_call', …)` with `fetch('/api/v1/commands/:name', …)`;
+  add a tiny typed API client. `useConfig()` calls `GET` a config endpoint
+  instead of the tauri `get_app_config` command.
 - Vite dev server proxies `/api` → `appctl serve`. Frontend is fully optional:
   the template is useful headless with just the CLI + API.
 
@@ -200,6 +252,30 @@ is precisely what an MCP transport needs:
 - Future `appctl mcp` adapter maps `tools/list` → registry schemas and
   `tools/call` → `registry.execute`. Leave a stub subcommand returning
   "unimplemented" and a `docs/` note describing the adapter.
+
+## 8b. Example command surface
+
+Swap the desktop-flavored examples for server-relevant ones so the template's
+sample commands are coherent headless:
+- Drop `clipboard` probe and the `emit` desktop-event command (always
+  Unsupported on a server).
+- Keep `ping`, `read_file`, `write_file`, `list_dir`, `system_info`, `doctor`,
+  and the `network`/`filesystem` probes.
+- Add an `http_request` command (already on the repo TODO) as the canonical
+  async example that exercises the `Ctx`, the typed contract, and a real await.
+
+## 8c. Project scaffolding / `make init` rebuild
+
+The current `make init` rewrites `tauri.conf.json`, the bundle identifier,
+`productName`, etc. — all Tauri-specific — so the "start a new project from this
+template" UX must be rebuilt for the cargo+clap layout (rename workspace crates,
+binary name, package metadata, README, identifiers; copy `.env.example`→`.env`).
+
+> A subagent is dissecting mcp-template's onboarding skill + `scaffold.py` +
+> `templates/` to inform a Rust-native equivalent (cargo+clap, no cookiecutter).
+> **This section will be filled from that report** — covering both `make init`
+> (project rename/bootstrap) and a `appctl scaffold` (new-command generator) if
+> warranted, plus an onboarding skill.
 
 ## 9. Teardown checklist (Tauri/desktop removal)
 
@@ -224,18 +300,23 @@ is precisely what an MCP transport needs:
 
 ```
 Phase 0  Baseline:  cargo test --workspace passes; branch ready.
-Phase 1  Config:    extract crates/config from src-tauri; port tests;
-                    src-tauri temporarily depends on it. Tree green.
-Phase 2  Contract:  introduce typed Command trait + schemars; port the 5
-                    example commands; registry keeps execute()+adds schema().
-                    CLI `call` unchanged externally. Tree green.
-Phase 3  HTTP API:  add `appctl serve --http` (axum) reusing registry;
-                    /healthz /commands /commands/:name /probe /doctor.
-                    Retire UDS daemon. Tree green.
-Phase 4  Teardown:  delete src-tauri + tauri frontend deps; fix workspace,
-                    Makefile, CI; clean orphan crate. Pure server+CLI. Green.
-Phase 5  Frontend:  move src→frontend, convert invoke()→fetch(); optional.
-Phase 6  MCP stub + docs/README/CLAUDE rewrite; final CI + prek pass.
+Phase 1  Config:    extract crates/config from src-tauri; port tests +
+                    sanitizer security test; src-tauri temporarily depends on
+                    it. Tree green.
+Phase 2  Contract:  async Command trait + schemars; one input struct derives
+                    clap::Args + Deserialize + JsonSchema; per-request Ctx (no
+                    identity); per-transport expose flags; registry gains
+                    schema(). Port example commands. Tree green.
+Phase 3  HTTP API:  axum `serve` reusing registry; /api/v1 routes; bare-output
+                    body + run_id header; CORS/trace/request-id/timeout;
+                    graceful shutdown. Add 5.1 integration tests. Retire UDS
+                    daemon. Tree green.
+Phase 4  Teardown:  delete src-tauri + tauri frontend deps; swap example
+                    commands (8b); fix workspace, Makefile, CI; clean orphan
+                    crate. Pure server+CLI. Green.
+Phase 5  Scaffold:  rebuild `make init` + onboarding (8c, per subagent report).
+Phase 6  Frontend:  move src→frontend, convert invoke()→fetch(); optional.
+Phase 7  MCP stub + docs/README/CLAUDE rewrite; final CI + prek pass.
 ```
 
 Rationale for order: config and the typed contract must exist **before** Tauri
@@ -249,7 +330,8 @@ is deleted, so the core always compiles standalone.
 | Typed-registry type erasure is fiddly in Rust | Object-safe inner trait doing Value↔typed conversion; commands implement the typed trait only. |
 | Frontend rewrite scope creep | Frontend is optional and last; ship CLI+API value before touching it. |
 | Loss of desktop features later regretted | Documented explicitly as a non-goal; Tauri layer was thin and re-addable atop `engine`. |
-| `clipboard`/`emit` commands meaningless server-side | Keep as capability examples (degrade to Unsupported headless) or swap for server-relevant example commands. |
+| `clipboard`/`emit` commands meaningless server-side | Swap for server-relevant examples; add async `http_request` (see 8b). |
+| `async-trait` + type erasure interacts awkwardly | Inner object-safe trait is `async` too; box futures at the erasure boundary. Validated by Phase 2 before any transport depends on it. |
 
 ## 12. Open questions
 
