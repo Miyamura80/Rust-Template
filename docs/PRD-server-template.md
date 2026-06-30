@@ -142,6 +142,10 @@ trait Command {
 - Each entry carries **per-transport visibility** flags (mirrors the reference's
   MCP exclusion set), e.g. `expose: { api: true, mcp: false }`, so CLI-only
   utility commands don't leak into the API/MCP tool surface.
+- **Registration via `inventory`/`linkme`** (not a hand-maintained `register()`
+  list): a command self-registers at link time, giving the "drop a file, it's
+  wired" UX that makes `appctl new` (§8c) a pure file generator. Decide this here
+  in Phase 2 since it shapes the registry type.
 - New introspection: `registry.schema(name) -> { input_schema, output_schema }`,
   consumed by the API (`GET /commands`, OpenAPI) and the future MCP `tools/list`.
 
@@ -264,18 +268,88 @@ sample commands are coherent headless:
 - Add an `http_request` command (already on the repo TODO) as the canonical
   async example that exercises the `Ctx`, the typed contract, and a real await.
 
-## 8c. Project scaffolding / `make init` rebuild
+## 8c. Project onboarding + command scaffolding
 
-The current `make init` rewrites `tauri.conf.json`, the bundle identifier,
-`productName`, etc. — all Tauri-specific — so the "start a new project from this
-template" UX must be rebuilt for the cargo+clap layout (rename workspace crates,
-binary name, package metadata, README, identifiers; copy `.env.example`→`.env`).
+Verified from mcp-template source: it has **two unrelated systems**, and we
+mirror the split. Today's `make init` is only a thin Tauri rename — we replace
+it with the richer model.
 
-> A subagent is dissecting mcp-template's onboarding skill + `scaffold.py` +
-> `templates/` to inform a Rust-native equivalent (cargo+clap, no cookiecutter).
-> **This section will be filled from that report** — covering both `make init`
-> (project rename/bootstrap) and a `appctl scaffold` (new-command generator) if
-> warranted, plus an onboarding skill.
+```
+                     Rust-Template repo
+                            │
+      ┌──────────────────────┴───────────────────────┐
+   PROJECT ONBOARDING                          COMMAND SCAFFOLDING
+   (one-time, mutates repo)                    (recurring, adds files)
+      │                                               │
+  make init ──► appctl init                   appctl new <name>
+      │  (wizard | --profile/--config/--dry-run)      │  templates/command.rs.tpl
+   rename · brand · prune surfaces ·          ──► generates an engine Command
+   .env setup · prek hooks                        (+ optional CLI subcommand)
+```
+
+### A. Project onboarding — `make init` → `appctl init`
+
+A Rust onboarding subcommand mirroring mcp-template's `init/onboard.py`, living
+in `crates/cli/src/init/`:
+
+```
+crates/cli/src/init/
+  config.rs   profile/surface enums + Config + expand()   ← source of truth
+  wizard.rs   dialoguer interactive multi-step flow
+  rename.rs   walkdir bulk str::replace of sentinels
+  prune.rs    delete crate dirs + toml_edit Cargo.toml/workspace rewrites
+  env.rs      .env.example → .env (grouped, masked secrets via dialoguer)
+  plan.rs     dry-run plan (comfy-table), printed before any mutation
+```
+
+Adopt the reference's proven patterns:
+- **Profiles + per-axis overrides.** For this template: `cli-only`,
+  `server-only`, `cli+server` (± optional `frontend`). `--profile`, `--config
+  <yaml>`, `ARGS=` overrides, all behind one `Config` with an `expand()` that
+  encodes implications (e.g. `frontend ⇒ server`).
+- **Dry-run first, always.** `make init … DRY_RUN=1` prints the plan; mutation
+  is gated. The onboarding skill mandates a dry run before applying.
+- **Idempotent.** Rename/prune self-detect completion and no-op; deletes are
+  existence-guarded.
+- **`toml_edit`, not regex, for `Cargo.toml`.** Pruning a surface = remove the
+  crate dir + drop it from `[workspace].members` and dependents'
+  `[dependencies]` — format-preserving and robust (the reference uses brittle
+  regex on `pyproject.toml`; we do better).
+- **Rename sentinels** (`rust-template`/`appctl`/`myorg`) replaced across an
+  extension allowlist via `walkdir`, skipping `.git`/`target`/`node_modules`;
+  GitHub owner/repo auto-detected from `git remote`. Read-only on git — never
+  commit/push.
+
+`make init` wraps it:
+```make
+init:
+	cargo run -p appctl -- init $(if $(PROFILE),--profile $(PROFILE),) \
+	  $(if $(CONFIG),--config $(CONFIG),) $(if $(DRY_RUN),--dry-run,) $(ARGS)
+```
+
+### B. Command scaffolding — `appctl new <name>`
+
+A `string`-substitution generator over `templates/command.rs.tpl` (no
+cookiecutter/Jinja needed) that creates a new **engine `Command`** (input/output
+structs + impl) and optionally a CLI subcommand wrapper.
+
+- **Auto-registration:** clap/Rust have no runtime module discovery like
+  Python's. To keep the "drop a file, it's registered" UX, register engine
+  commands with **`inventory`** (or `linkme`) so a generated command
+  self-registers at link time — no hand-editing a `mod.rs` registration list.
+  This is a small but high-value decision for the registry design (Phase 2).
+
+### C. Onboarding skill
+
+Port `.agents/skills/onboarding/SKILL.md` nearly verbatim: inspect → interview →
+dry-run → confirm → apply → verify → handle-untouched-systems. Swap `make
+onboard`→`make init`, `pyproject.toml`→`Cargo.toml`, verify via `cargo
+build`/`cargo test`/`appctl --help` + `/healthz`. Keep the skill pointing at one
+declared source-of-truth file (`crates/cli/src/init/config.rs`).
+
+> Note: `inventory`-based auto-registration (B) feeds back into Phase 2 — if we
+> want it, the typed `Command` registry should collect entries via `inventory`
+> rather than a hand-maintained `register()` list.
 
 ## 9. Teardown checklist (Tauri/desktop removal)
 
