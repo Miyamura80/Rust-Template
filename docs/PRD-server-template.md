@@ -6,8 +6,36 @@ Convert this Tauri desktop template into a **Rust application-server template**
 with a unified CLI & HTTP API interface over a single shared core, plus an
 **optional** Bun/React frontend for visualization. Inspired by
 [`Miyamura80/MCP-Template`](https://github.com/Miyamura80/MCP-Template):
-*write business logic once, ship it as a CLI subcommand and an HTTP route* —
-with an MCP transport designed-for but **not built** in this iteration.
+*write the business logic + its typed I/O contract once*, and **auto-derive the
+API (and, later, MCP) from that contract** — with an MCP transport designed-for
+but **not built** in this iteration.
+
+### How the reference actually works (verified against source)
+
+MCP-Template does NOT auto-generate everything from one registry. There are two
+distinct mechanisms, and the split is intentional:
+
+- A `@service(name, description, input_model, output_model)` decorator registers
+  a `ServiceEntry{func, InputModel, OutputModel}` in a list. `discover_services()`
+  imports every `services.*` module so the decorators fire.
+- **API and MCP are auto-generated** from that registry: the API loops the
+  registry and mounts one `POST /api/v1/services/{name}` per service
+  (`input_model` = request body, `output_model` = response); MCP loops the same
+  registry and synthesizes a tool whose JSON schema comes from `input_model`.
+- **The CLI is hand-written per command** (`src/cli/commands/*.py`, its own
+  `discover_commands()` scan). Each command is a bespoke Typer function with its
+  own flags, `--dry-run`/`--verbose`, interactive fallback, and rendering — it
+  *imports and calls* the service. The CLI is NOT derived from the registry.
+- A per-service **exclusion set** hides CLI-only services (e.g. `greet`,
+  `doctor`, `config_*`) from the MCP tool surface. Transport visibility is
+  per-service.
+- **Cross-cutting concerns live in the transport wrappers, not the service**:
+  the API wrapper enforces auth scopes + daily quota and injects `user_id`; MCP
+  has an analogous guard. Services stay pure. API + MCP run in one process
+  (MCP mounts at `/mcp`).
+
+**Implication for this template:** the typed contract buys auto-derived API/MCP
+for free, but CLI ergonomics are worth hand-authoring. We mirror that split.
 
 All Tauri/desktop scaffolding is removed.
 
@@ -98,11 +126,25 @@ trait Command {
 
 - The registry stores **type-erased** entries (an object-safe inner trait that
   takes/returns `serde_json::Value`, with deserialize→run→serialize wrapped
-  inside) **plus** the input/output `schemars::schema_for!` outputs.
+  inside) **plus** the input/output `schemars::schema_for!` outputs. This is the
+  Rust analog of MCP-Template's `ServiceEntry{func, InputModel, OutputModel}`.
+- Each entry carries **per-transport visibility** flags (mirrors the reference's
+  MCP exclusion set), e.g. `expose: { api: true, mcp: false }`, so CLI-only
+  utility commands don't leak into the API/MCP tool surface.
 - `CommandResult` (the stable envelope: run_id, status, timing, error, data)
   is unchanged — typed output is serialized into its `data` field.
 - New introspection: `registry.schema(name) -> { input_schema, output_schema }`,
   consumed by the API (`GET /commands`, OpenAPI) and the future MCP `tools/list`.
+
+### 4.1 Transport split (mirrors the reference)
+
+- **API + MCP are auto-derived** by looping the registry — no per-command
+  boilerplate. Adding a `Command` makes it callable over HTTP (and MCP) for free.
+- **CLI subcommands are hand-written** (clap), importing and calling the same
+  command/service, so each gets first-class flags and output. The CLI is not
+  generated from the registry — only the *core logic + schema* is shared.
+- **Cross-cutting concerns (auth, rate limit, logging) go in the transport
+  layer** (tower middleware for HTTP), never in `engine`. The core stays pure.
 
 New deps: `schemars` (engine), `clap` already present.
 
