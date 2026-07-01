@@ -1,9 +1,11 @@
-pub mod global_config;
 pub mod logging;
 
-pub use global_config as config;
+// Config now lives in the standalone `app-config` crate. Re-exported under the
+// historical `config`/`global_config` names so existing call sites keep working.
+pub use app_config as config;
+pub use app_config as global_config;
 
-use global_config::FrontendConfig;
+use app_config::FrontendConfig;
 // ---------------------------------------------------------------------------
 // Engine integration
 // ---------------------------------------------------------------------------

@@ -1,3 +1,16 @@
+//! Application configuration, shared across every transport (CLI, HTTP API,
+//! and future MCP).
+//!
+//! [`AppConfig`] is the full configuration including secret credentials;
+//! [`FrontendConfig`] is the sanitized projection safe to expose to a browser
+//! over HTTP. The sanitizer is a **security boundary** — no secret field may
+//! ever cross it (enforced by `#[serde(skip_serializing)]` and covered by the
+//! tests in this crate).
+//!
+//! Config is loaded from `global_config.yaml` (next to this crate by default,
+//! or `APP_CONFIG_PATH`), layered with an optional `production_config.yaml` /
+//! `.global_config.yaml`, then overridden by `APP__`-prefixed env vars.
+
 use config::{Config, ConfigError, Environment, File};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -17,17 +30,20 @@ pub struct AppConfig {
     #[serde(default)]
     pub features: HashMap<String, bool>,
 
-    // Environment variables (optional in config file, usually injected)
+    // Secret credentials (optional in config file, usually injected via env).
+    // `#[serde(skip_serializing)]` is the security boundary: these never
+    // serialize into any payload (see `FrontendConfig` and the sanitization
+    // test). Prefer the accessor methods below for read access.
     #[serde(skip_serializing)]
-    pub(crate) openai_api_key: Option<String>,
+    pub openai_api_key: Option<String>,
     #[serde(skip_serializing)]
-    pub(crate) anthropic_api_key: Option<String>,
+    pub anthropic_api_key: Option<String>,
     #[serde(skip_serializing)]
-    pub(crate) groq_api_key: Option<String>,
+    pub groq_api_key: Option<String>,
     #[serde(skip_serializing)]
-    pub(crate) perplexity_api_key: Option<String>,
+    pub perplexity_api_key: Option<String>,
     #[serde(skip_serializing)]
-    pub(crate) gemini_api_key: Option<String>,
+    pub gemini_api_key: Option<String>,
 }
 
 impl AppConfig {
@@ -210,33 +226,31 @@ pub fn reset_config() {
     *write = None;
 }
 
+/// Directory that config files are resolved against.
+///
+/// Defaults to this crate's directory (baked in at compile time via
+/// `CARGO_MANIFEST_DIR`), which is correct for `cargo run`/`cargo test`. A
+/// deployed binary should point `APP_CONFIG_PATH` at its config file instead;
+/// sibling files (`production_config.yaml`, `.global_config.yaml`) are then
+/// resolved next to that file.
+fn config_base_dir() -> std::path::PathBuf {
+    std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+}
+
 fn load_config() -> Result<AppConfig, ConfigError> {
-    let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".to_string());
-    let base_path = std::path::Path::new(&manifest_dir);
-    // When running from repo root (e.g. via make), manifest_dir might point to src-tauri if running cargo test inside it,
-    // or we might need to adjust based on CWD.
-    // However, the issue is that "src-tauri/" prefix in File::with_name assumes CWD is repo root.
-    // If CARGO_MANIFEST_DIR is set, it points to the directory containing Cargo.toml (src-tauri).
-    // So if we are in src-tauri, we should NOT prepend src-tauri/.
+    // `APP_CONFIG_PATH` (full path to the primary YAML) overrides the default
+    // location; production/local overrides are resolved next to it.
+    let config_path = std::env::var("APP_CONFIG_PATH")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| config_base_dir().join("global_config.yaml"));
 
-    let config_path = if base_path.join("global_config.yaml").exists() {
-        base_path.join("global_config.yaml")
-    } else {
-        // Fallback for repo-root execution where src-tauri/ exists
-        std::path::Path::new("src-tauri").join("global_config.yaml")
-    };
+    let config_dir = config_path
+        .parent()
+        .map(std::path::Path::to_path_buf)
+        .unwrap_or_else(|| std::path::PathBuf::from("."));
 
-    let prod_config_path = if base_path.join("production_config.yaml").exists() {
-        base_path.join("production_config.yaml")
-    } else {
-        std::path::Path::new("src-tauri").join("production_config.yaml")
-    };
-
-    let local_config_path = if base_path.join(".global_config.yaml").exists() {
-        base_path.join(".global_config.yaml")
-    } else {
-        std::path::Path::new("src-tauri").join(".global_config.yaml")
-    };
+    let prod_config_path = config_dir.join("production_config.yaml");
+    let local_config_path = config_dir.join(".global_config.yaml");
 
     let builder = Config::builder()
         // Load default config (mandatory)
@@ -305,26 +319,26 @@ mod tests {
         {
             let _guard = EnvGuard::new("APP__LLM_CONFIG__CACHE_ENABLED", "true");
             let config = load_config().expect("Should load config");
-            assert_eq!(config.llm_config.cache_enabled, true);
+            assert!(config.llm_config.cache_enabled);
         }
 
         {
             let _guard = EnvGuard::new("APP__LLM_CONFIG__CACHE_ENABLED", "false");
             let config = load_config().expect("Should load config");
-            assert_eq!(config.llm_config.cache_enabled, false);
+            assert!(!config.llm_config.cache_enabled);
         }
 
         // Test boolean coercion from '1' and '0' (porting from Python tests)
         {
             let _guard = EnvGuard::new("APP__LOGGING__FORMAT__LOCATION__ENABLED", "1");
             let config = load_config().expect("Should load config");
-            assert_eq!(config.logging.format.location.enabled, true);
+            assert!(config.logging.format.location.enabled);
         }
 
         {
             let _guard = EnvGuard::new("APP__LOGGING__FORMAT__LOCATION__ENABLED", "0");
             let config = load_config().expect("Should load config");
-            assert_eq!(config.logging.format.location.enabled, false);
+            assert!(!config.logging.format.location.enabled);
         }
     }
 
@@ -423,11 +437,36 @@ mod tests {
             gemini_api_key: None,
         };
 
+        // The sanitized projection must not leak the secret value or its key.
         let frontend_config = FrontendConfig::from(&config);
         let json = serde_json::to_string(&frontend_config).unwrap();
 
         assert!(!json.contains("secret-key"));
         assert!(!json.contains("openai_api_key"));
+
+        // Security boundary: even serializing the *full* AppConfig (e.g. by
+        // accident in a log line or debug endpoint) must never emit a secret.
+        let mut config = config;
+        config.openai_api_key = Some("secret-openai".into());
+        config.anthropic_api_key = Some("secret-anthropic".into());
+        config.groq_api_key = Some("secret-groq".into());
+        config.perplexity_api_key = Some("secret-perplexity".into());
+        config.gemini_api_key = Some("secret-gemini".into());
+
+        let full_json = serde_json::to_string(&config).unwrap();
+        for leaked in [
+            "secret-openai",
+            "secret-anthropic",
+            "secret-groq",
+            "secret-perplexity",
+            "secret-gemini",
+            "api_key",
+        ] {
+            assert!(
+                !full_json.contains(leaked),
+                "AppConfig serialization leaked `{leaked}`: {full_json}"
+            );
+        }
     }
 
     #[test]
