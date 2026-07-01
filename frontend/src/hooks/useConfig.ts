@@ -1,5 +1,5 @@
-import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
+import { ApiError, fetchConfig } from "../api/client";
 
 export interface AppConfig {
 	model_name: string;
@@ -31,13 +31,20 @@ export function useConfig() {
 	const [error, setError] = useState<string | null>(null);
 
 	useEffect(() => {
-		invoke<AppConfig>("get_app_config")
+		fetchConfig<AppConfig>()
 			.then((data) => {
 				setConfig(data);
 				setLoading(false);
 			})
 			.catch((err) => {
-				setError(err.toString());
+				// ApiError carries the server's error code (e.g. INTERNAL_ERROR).
+				setError(
+					err instanceof ApiError
+						? `${err.code}: ${err.message}`
+						: err instanceof Error
+							? err.message
+							: String(err),
+				);
 				setLoading(false);
 			});
 	}, []);

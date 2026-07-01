@@ -229,9 +229,9 @@ impl Config {
         }
 
         if !self.frontend {
-            for rel in ["src", "index.html", "vite.config.ts"] {
-                ops.push(PruneOp::DeletePath(root.join(rel)));
-            }
+            // The frontend is self-contained under `frontend/`; deleting it plus
+            // stripping its deps/scripts from the root package.json removes it.
+            ops.push(PruneOp::DeletePath(root.join("frontend")));
             ops.push(PruneOp::StripFrontendPackageJson {
                 manifest: root.join("package.json"),
             });

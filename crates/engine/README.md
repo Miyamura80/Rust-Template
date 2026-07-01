@@ -1,13 +1,13 @@
 # engine – Shared Backend Logic
 
-Platform-agnostic engine crate that contains all real backend logic for the
-Tauri template app. Used by both the GUI (`src-tauri`) and the headless CLI
-test harness (`crates/cli`).
+The transport-agnostic service core of the Rust server template — all real
+backend logic. Driven by `appctl` (`crates/cli`) over the CLI and the HTTP API,
+and (later) MCP; the same registry serves every transport.
 
 ## Design Principles
 
-- **No Tauri dependency** – the engine never imports Tauri types, so it can run
-  in any Rust context (CLI, tests, WASM, etc.).
+- **No transport dependency** – the engine never imports CLI, axum, or HTTP
+  types, so it can run in any Rust context (CLI, HTTP API, tests, etc.).
 - **Trait-based OS access** – filesystem, network, and clipboard operations are
   behind traits (`FilesystemOps`, `NetworkOps`, `ClipboardOps`). Callers inject
   the implementation they need (real platform vs. headless stubs).
@@ -21,7 +21,7 @@ test harness (`crates/cli`).
 
 | Module | Purpose |
 |--------|---------|
-| `types` | Output contract: `CommandResult`, `Status`, `ErrorCode`, `EnvSummary`, scenario/daemon types |
+| `types` | Output contract: `CommandResult`, `Status`, `ErrorCode`, `EnvSummary`, scenario types |
 | `traits` | OS capability traits: `FilesystemOps`, `NetworkOps`, `ClipboardOps` |
 | `platform` | Real implementations (`StdFilesystem`, `ReqwestNetwork`, `SystemClipboard`) + `HeadlessClipboard` |
 | `context` | `AppContext` – holds trait objects and config; constructors for platform/headless |
@@ -33,39 +33,31 @@ test harness (`crates/cli`).
 ## Usage
 
 ```rust
-use engine::{AppContext, CommandRegistry};
+use engine::{AppContext, CommandRegistry, Ctx};
 
-// Create context with real platform capabilities
-let ctx = AppContext::default_platform();
+// Shared capabilities built once; a lightweight Ctx is built per invocation.
+let caps = AppContext::default_platform();
 let registry = CommandRegistry::new();
+let cx = Ctx::new(&caps);
 
-// Execute a command
-let result = registry.execute("ping", serde_json::json!({}), &ctx);
+// `execute` returns the diagnostic CommandResult envelope (used by the CLI);
+// `call` returns the bare typed Output (used by the HTTP API).
+let result = registry.execute("ping", serde_json::json!({}), &cx).await;
 assert_eq!(result.status, engine::Status::Pass);
 
 // Run a probe
-let probe_result = engine::probes::run_probe("filesystem", &ctx).await;
+let probe_result = engine::probes::run_probe("filesystem", &caps).await;
 ```
 
 ## Adding Commands
 
-Register new commands in `CommandRegistry::new()`:
+Commands implement the typed, async `Command` trait and **self-register at link
+time** via `register_command!` — there is no hand-maintained registration list.
+The fastest path is `appctl new <name>` (or `make new name=<name>`); see the
+`update-backend` skill for the full pattern.
 
 ```rust
-impl CommandRegistry {
-    pub fn new() -> Self {
-        let mut reg = Self { handlers: HashMap::new() };
-        reg.register("ping", cmd_ping);
-        reg.register("my_command", cmd_my_command);
-        reg
-    }
-}
-
-fn cmd_my_command(args: Value, ctx: &AppContext) -> Result<Value, CommandError> {
-    let input = args.get("key").and_then(|v| v.as_str())
-        .ok_or_else(|| CommandError::InvalidInput("missing 'key'".into()))?;
-    Ok(serde_json::json!({ "result": input }))
-}
+register_command!(MyCommand); // at the bottom of commands/my_command.rs
 ```
 
 ## OS Traits

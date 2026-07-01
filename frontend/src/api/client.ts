@@ -1,0 +1,66 @@
+// Tiny typed client for the `appctl serve` HTTP API (`/api/v1`).
+//
+// In development, Vite proxies `/api` → `appctl serve` (see vite.config.ts), so
+// these relative URLs work both in `bun run dev` and when the built assets are
+// served alongside the API in production.
+
+const API_BASE = "/api/v1";
+
+/** The problem body shape returned by the API on error: `{ error: { code, message } }`. */
+interface ApiErrorBody {
+	code: string;
+	message: string;
+}
+
+/** Thrown when the API responds with a non-2xx status. Carries the error code. */
+export class ApiError extends Error {
+	readonly code: string;
+	readonly status: number;
+
+	constructor(code: string, message: string, status: number) {
+		super(message);
+		this.name = "ApiError";
+		this.code = code;
+		this.status = status;
+	}
+}
+
+async function toApiError(res: Response): Promise<ApiError> {
+	let code = "INTERNAL_ERROR";
+	let message = res.statusText || `request failed (${res.status})`;
+	try {
+		const body = (await res.json()) as { error?: ApiErrorBody };
+		if (body?.error) {
+			code = body.error.code;
+			message = body.error.message;
+		}
+	} catch {
+		// Non-JSON error body — keep the status-derived defaults.
+	}
+	return new ApiError(code, message, res.status);
+}
+
+/**
+ * Invoke an engine command by name. The request body is the command's typed
+ * `Input`; the response is the bare typed `Output` (see the PRD output
+ * contract). Throws {@link ApiError} on a non-2xx response.
+ */
+export async function callCommand<TOutput, TInput = unknown>(
+	name: string,
+	args: TInput = {} as TInput,
+): Promise<TOutput> {
+	const res = await fetch(`${API_BASE}/commands/${name}`, {
+		method: "POST",
+		headers: { "content-type": "application/json" },
+		body: JSON.stringify(args ?? {}),
+	});
+	if (!res.ok) throw await toApiError(res);
+	return (await res.json()) as TOutput;
+}
+
+/** Fetch the sanitized frontend configuration (`GET /api/v1/config`). */
+export async function fetchConfig<T>(): Promise<T> {
+	const res = await fetch(`${API_BASE}/config`);
+	if (!res.ok) throw await toApiError(res);
+	return (await res.json()) as T;
+}

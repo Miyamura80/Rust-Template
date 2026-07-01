@@ -1,8 +1,8 @@
-//! Engine crate – shared backend logic for the Tauri template app.
+//! Engine crate – the shared service core for the Rust server template.
 //!
 //! This crate contains all real backend logic and OS integrations behind
-//! traits. It does NOT depend on Tauri runtime types, so it can be used
-//! by both the GUI wrapper and the headless CLI test harness.
+//! traits. It has NO transport dependency (no CLI, axum, or HTTP types), so the
+//! same commands run over the CLI, the HTTP API, and (later) MCP.
 
 pub mod commands;
 pub mod context;

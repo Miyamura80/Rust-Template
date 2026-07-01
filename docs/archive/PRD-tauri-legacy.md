@@ -1,5 +1,10 @@
 # Product Requirements Document: Python-to-Rust Tauri Migration
 
+> **ARCHIVED (legacy).** This describes the earlier Tauri/desktop foundation,
+> which has since been superseded. The template is now a Rust server + CLI/API —
+> see [`docs/PRD-server-template.md`](../PRD-server-template.md). Kept for history only.
+
+
 ## 1. Overview
 This document tracks the transition from the legacy Python-based template to a native Rust + Tauri foundation. All Python scaffolding has been removed from the root workspace, and the remaining backend/asset tooling now lives in `src-tauri` with `bun` as the single frontend package manager and `cargo` for Rust tasks.
 

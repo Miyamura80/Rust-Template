@@ -1,7 +1,12 @@
-# appctl – CLI Test Harness
+# appctl – CLI + HTTP API
 
-Headless CLI for invoking the same engine logic that powers the Tauri GUI app.
-Designed for VM-based compatibility testing on macOS and Linux.
+The `appctl` binary drives the shared `engine` command registry over multiple
+transports: the CLI (`call` / `probe` / `doctor` / `run-scenario`) and the axum
+HTTP API (`serve`). `init` onboards the template into a real project, `new`
+scaffolds a command, and `mcp` is a stub for the future MCP transport.
+
+The `cli` and `http-api` surfaces are cargo features (both on by default), so
+`appctl init` can prune one and still leave a compiling binary.
 
 ## Build
 
@@ -90,43 +95,41 @@ appctl run-scenario scenario.yaml --artifacts /tmp/artifacts
 
 ### serve
 
-Start a daemon over a Unix socket. Accepts newline-delimited JSON requests.
+Start the axum HTTP API. Host/port default from config
+(`APP__SERVER__HOST` / `APP__SERVER__PORT`) and can be overridden with flags.
 
 ```bash
-appctl serve --socket /tmp/appctl.sock
+appctl serve --host 0.0.0.0 --port 8080
 ```
 
-Protocol:
+Routes (versioned under `/api/v1`, auto-derived from the registry):
 
-```json
-// Request
-{"id": "1", "method": "call", "params": {"cmd": "ping", "args": {}}}
-
-// Response
-{"id": "1", "result": {"run_id": "...", "status": "pass", ...}}
+```
+GET  /healthz                      liveness
+GET  /api/v1/commands              list commands + JSON Schemas
+POST /api/v1/commands/:name        run a command; body = Input, resp = bare Output
+POST /api/v1/probe/:target         run a probe (filesystem | network)
+GET  /api/v1/doctor                env report
+GET  /api/v1/config                sanitized FrontendConfig (never secrets)
 ```
 
-Supported methods: `call`, `probe`, `doctor`.
+The `run_id` rides in the `x-run-id` response header; `CommandError`s map to HTTP
+status codes with a small `{ "error": { "code", "message" } }` problem body.
 
-### emit
+### mcp
 
-Desktop event simulation (skeleton -- returns UNIMPLEMENTED or UNSUPPORTED).
-
-```bash
-appctl emit tray-click --json
-appctl emit deep-link --json
-appctl emit file-drop --json
-appctl emit app-focus --json
-```
+Stub for the future MCP transport — prints a notice and exits (`EX_UNAVAILABLE`).
+See [`docs/mcp.md`](../../docs/mcp.md) for the adapter design.
 
 ## Output Contract
 
-Every command produces a result with this stable JSON schema:
+The CLI wraps command output in a diagnostic envelope with this stable JSON
+schema (the HTTP API returns the **bare `Output`** instead):
 
 ```json
 {
   "run_id": "uuid",
-  "command": "call|probe|doctor|run-scenario|emit|serve",
+  "command": "call|probe|doctor|run-scenario",
   "target": "<cmd or probe name>",
   "status": "pass|fail|skip|error",
   "error": { "code": "ERROR_CODE", "message": "..." },

@@ -2,13 +2,13 @@
 //!
 //! Runs the shared `engine` command registry over multiple transports:
 //! `serve` (axum HTTP API) plus the CLI diagnostics (`call`, `probe`, `doctor`,
-//! `run-scenario`). `init` onboards the template into a real project and `new`
-//! scaffolds a fresh engine command.
-//!
-//! Transports are cargo features (`cli`, `http-api`) so `appctl init` can prune
-//! a surface and still leave a compiling project.
+//! `run-scenario`). `init` onboards the template into a real project, `new`
+//! scaffolds a fresh engine command, and `mcp` is a stub for the future MCP
+//! transport. Transports are cargo features (`cli`, `http-api`) so `appctl
+//! init` can prune a surface and still leave a compiling project.
 
 mod init;
+mod mcp;
 mod scaffold;
 #[cfg(feature = "http-api")]
 mod serve_http;
@@ -44,6 +44,9 @@ enum Commands {
 
     /// Scaffold a new engine command from the template.
     New(scaffold::NewArgs),
+
+    /// (stub) Serve the registry over MCP — designed-for, not yet implemented.
+    Mcp,
 
     /// Collect environment facts and emit an env summary.
     #[cfg(feature = "cli")]
@@ -144,6 +147,7 @@ async fn main() {
                 std::process::exit(1);
             }
         }
+        Commands::Mcp => mcp::run(),
         #[cfg(feature = "cli")]
         Commands::Doctor { json, out } => cmd_doctor(json, out).await,
         #[cfg(feature = "cli")]

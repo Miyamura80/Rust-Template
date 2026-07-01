@@ -16,8 +16,8 @@ use std::time::Instant;
 
 /// Central context passed to all engine operations.
 ///
-/// Holds trait-object capabilities so callers (CLI / Tauri) can swap
-/// implementations (e.g. headless clipboard vs real clipboard).
+/// Holds trait-object capabilities so callers (CLI / HTTP API / tests) can swap
+/// implementations (e.g. headless stubs vs real platform capabilities).
 pub struct AppContext {
     fs: Box<dyn FilesystemOps>,
     network: Box<dyn NetworkOps>,

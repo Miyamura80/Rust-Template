@@ -2,7 +2,7 @@
 name = "engine"
 version = "0.1.0"
 edition = "2021"
-description = "Headless engine for the Tauri template app – shared between GUI and CLI"
+description = "Transport-agnostic service core for the Rust server template – shared across CLI, HTTP API, and MCP"
 license = "MIT"
 
 [dependencies]

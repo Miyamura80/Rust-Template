@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { callCommand } from "../api/client";
 import { useConfig } from "../hooks/useConfig";
 import { SettingsPanel } from "./SettingsPanel";
 
@@ -43,6 +44,7 @@ export function Chat() {
 	const [messageCount, setMessageCount] = useState(0);
 	const [sidebarOpen, setSidebarOpen] = useState(false);
 	const [settings, setSettings] = useState<ChatSettings>(DEFAULT_SETTINGS);
+	const [backendOnline, setBackendOnline] = useState<boolean | null>(null);
 	const messagesEndRef = useRef<HTMLDivElement>(null);
 	const textareaRef = useRef<HTMLTextAreaElement>(null);
 	const { config } = useConfig();
@@ -51,6 +53,18 @@ export function Chat() {
 	useEffect(() => {
 		messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
 	}, [messages, isTyping]);
+
+	// Ping the engine over the HTTP API to show live connectivity. This is the
+	// canonical example of the typed `callCommand` client hitting a real command.
+	useEffect(() => {
+		let cancelled = false;
+		callCommand<{ pong: boolean }>("ping")
+			.then(() => !cancelled && setBackendOnline(true))
+			.catch(() => !cancelled && setBackendOnline(false));
+		return () => {
+			cancelled = true;
+		};
+	}, []);
 
 	function resizeTextarea() {
 		const ta = textareaRef.current;
@@ -137,6 +151,22 @@ export function Chat() {
 							/>
 						</svg>
 					</button>
+					<span
+						className={`chat-status-dot chat-status-dot--${
+							backendOnline === null
+								? "unknown"
+								: backendOnline
+									? "online"
+									: "offline"
+						}`}
+						title={
+							backendOnline === null
+								? "Checking API…"
+								: backendOnline
+									? "API connected"
+									: "API offline — run `appctl serve`"
+						}
+					/>
 					<span className="chat-header-model">{modelLabel}</span>
 				</div>
 			</header>

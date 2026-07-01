@@ -1,25 +1,24 @@
 ---
 name: update-backend
-description: Guide for making changes to the Rust backend of the Tauri template, covering the engine crate, CLI harness, Tauri commands, and testing patterns.
+description: Guide for making changes to the Rust backend of the server template, covering the engine crate, the CLI + HTTP API transports, and testing patterns.
 ---
 
 # Update Backend Skill
 
-Use this skill whenever you are modifying Rust backend logic — adding commands, probes, traits, or configuration in `crates/engine`, `crates/cli`, or `src-tauri`.
+Use this skill whenever you are modifying Rust backend logic — adding commands, probes, traits, or configuration in `crates/engine` or `crates/cli`.
 
 ## Architecture
 
-The backend is split into three layers:
+The backend is split into two layers:
 
 | Layer | Path | Role |
 |-------|------|------|
-| **engine** | `crates/engine/` | All real backend logic. No Tauri dependency — runs in CLI, tests, and WASM. |
-| **appctl CLI** | `crates/cli/` | Headless test harness that drives `engine` for VM/CI compatibility testing. |
-| **src-tauri** | `src-tauri/` | Tauri host: wraps `engine` commands as Tauri `#[tauri::command]` handlers. |
+| **engine** | `crates/engine/` | All real backend logic. No transport dependency — runs in the CLI, the HTTP API, and tests. |
+| **appctl** | `crates/cli/` | The `appctl` binary. Drives `engine` over the CLI (`call`/`probe`/`doctor`/`run-scenario`) and the axum HTTP API (`serve`), gated behind the `cli` / `http-api` cargo features. |
 
 ### Design Principles (engine)
 
-- **No Tauri dependency** — never import Tauri types inside `crates/engine`.
+- **No transport dependency** — never import CLI, axum, or HTTP types inside `crates/engine`.
 - **Trait-based OS access** — filesystem, network, and clipboard go through `FilesystemOps`, `NetworkOps`, `ClipboardOps`. Inject real platform or headless stubs via `AppContext`.
 - **Structured results** — every operation returns `CommandResult` with `run_id`, `status`, `error`, `timing_ms`, and `env_summary`.
 - **No panics on missing capabilities** — headless environments get `SKIP` or `UNSUPPORTED` error codes.
@@ -87,10 +86,10 @@ register_command!(MyCommand);
 
 2. Declare the module in `crates/engine/src/commands/mod.rs` (`mod my_command;`).
    The `register_command!` line does the rest — `CommandRegistry::new()` collects
-   it automatically.
+   it automatically. (`appctl new` inserts this line for you.)
 
-3. No `src-tauri` change is needed: the generic `engine_call` handler (and the
-   HTTP `POST /api/v1/commands/:name` route) dispatch by name through the registry.
+3. No transport change is needed: the HTTP `POST /api/v1/commands/:name` route is
+   auto-derived from the registry, and the CLI `call` path dispatches by name.
 
 4. Smoke-test headlessly with `appctl`:
 
@@ -124,7 +123,7 @@ impl ClipboardOps for MyClipboard {
 }
 ```
 
-Inject via `AppContext` — real platform in `src-tauri`, headless stubs in tests and `appctl`.
+Inject via `AppContext` — the real platform capabilities in `appctl` (`AppContext::default_platform()`), headless stubs in tests (`AppContext::default_headless()`).
 
 ## Configuration
 
@@ -143,7 +142,7 @@ command genuinely needs config; prefer passing values in via the input struct.
 
 ## Testing with appctl
 
-The `appctl` CLI drives `engine` without a running Tauri process:
+The `appctl` CLI drives `engine` without a running HTTP server:
 
 ```bash
 # Build
@@ -201,4 +200,4 @@ Error codes: `INVALID_INPUT`, `UNSUPPORTED`, `UNIMPLEMENTED`, `DEPENDENCY_MISSIN
 - [ ] `cargo clippy` passes (no warnings)
 - [ ] `cargo test` passes
 - [ ] New command smoke-tested with `appctl call <cmd> --json`
-- [ ] `engine` crate has no Tauri imports
+- [ ] `engine` crate has no transport imports (no CLI/axum/HTTP types)
