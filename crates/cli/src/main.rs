@@ -7,7 +7,7 @@ mod serve;
 
 use clap::{Parser, Subcommand};
 use engine::types::*;
-use engine::{AppContext, CommandRegistry, CommandResult};
+use engine::{AppContext, CommandRegistry, CommandResult, Ctx};
 use std::path::PathBuf;
 
 // ===========================================================================
@@ -186,7 +186,8 @@ async fn cmd_call(
         }
     };
 
-    let result = registry.execute(cmd, args, ctx);
+    let cx = Ctx::new(ctx);
+    let result = registry.execute(cmd, args, &cx).await;
     if let Some(ref dir) = artifacts {
         write_artifacts(dir, &result);
     }

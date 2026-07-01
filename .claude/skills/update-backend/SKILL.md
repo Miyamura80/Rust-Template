@@ -32,30 +32,61 @@ The backend is split into three layers:
 
 ## Adding a Backend Command
 
-1. Implement the handler in `crates/engine/src/commands/`:
+Commands implement the typed, async `Command` trait (one input struct drives the
+CLI args, the HTTP body schema, and the future MCP tool schema) and
+**self-register at link time** via `register_command!` — there is no
+hand-maintained registration list.
+
+1. Drop a new file `crates/engine/src/commands/my_command.rs`:
 
 ```rust
-fn cmd_my_command(args: Value, ctx: &AppContext) -> Result<Value, CommandError> {
-    let input = args.get("key").and_then(|v| v.as_str())
-        .ok_or_else(|| CommandError::InvalidInput("missing 'key'".into()))?;
-    Ok(serde_json::json!({ "result": input }))
+use crate::commands::{Command, CommandError};
+use crate::context::Ctx;
+use crate::register_command;
+use async_trait::async_trait;
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
+
+#[derive(Default)]
+pub struct MyCommand;
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct MyCommandInput {
+    pub key: String,
 }
-```
 
-2. Register it in `CommandRegistry::new()`:
-
-```rust
-reg.register("my_command", cmd_my_command);
-```
-
-3. Expose it in `src-tauri` as a Tauri command (if the GUI needs it):
-
-```rust
-#[tauri::command]
-fn my_command(args: serde_json::Value, ctx: tauri::State<AppContext>) -> CommandResult {
-    ctx.registry.execute("my_command", args, &ctx)
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct MyCommandOutput {
+    pub result: String,
 }
+
+#[async_trait]
+impl Command for MyCommand {
+    type Input = MyCommandInput;
+    type Output = MyCommandOutput;
+
+    fn name(&self) -> &'static str { "my_command" }
+    fn description(&self) -> &'static str { "One-line description." }
+    // Optional: restrict transports, e.g. `Expose::cli_only()` / `Expose::no_mcp()`.
+
+    async fn run(&self, input: MyCommandInput, cx: &Ctx<'_>)
+        -> Result<MyCommandOutput, CommandError>
+    {
+        // `cx.fs()`, `cx.network()`, `cx.clipboard()` reach the capabilities;
+        // `cx.request_id` / `cx.deadline` are request-scoped.
+        Ok(MyCommandOutput { result: input.key })
+    }
+}
+
+register_command!(MyCommand);
 ```
+
+2. Declare the module in `crates/engine/src/commands/mod.rs` (`mod my_command;`).
+   The `register_command!` line does the rest — `CommandRegistry::new()` collects
+   it automatically.
+
+3. No `src-tauri` change is needed: the generic `engine_call` handler (and the
+   HTTP `POST /api/v1/commands/:name` route) dispatch by name through the registry.
 
 4. Smoke-test headlessly with `appctl`:
 
@@ -63,6 +94,12 @@ fn my_command(args: serde_json::Value, ctx: tauri::State<AppContext>) -> Command
 cargo build -p appctl
 appctl call my_command --args '{"key": "value"}' --json
 ```
+
+- Deserialize failures map to `INVALID_INPUT` automatically. Return typed
+  `CommandError` variants (`Unsupported`, `NetworkError`, `Timeout`, …) for
+  everything else; `CapError` from a capability converts via `?`.
+- API/MCP receive the **bare `Output`**; the CLI/scenario runner wrap it in the
+  `CommandResult` envelope. Introspect schemas via `registry.schema(name)`.
 
 ## Adding an OS Capability (Trait)
 
@@ -87,15 +124,18 @@ Inject via `AppContext` — real platform in `src-tauri`, headless stubs in test
 
 ## Configuration
 
-Source of truth: `src-tauri/global_config.yaml` (`.env` overrides).
-Access in Rust:
+Config lives in its own crate, `crates/config` (crate name `app-config`).
+Source of truth: `crates/config/global_config.yaml` (layered with
+`production_config.yaml` / `.global_config.yaml` and `APP__`-prefixed env
+overrides; `APP_CONFIG_PATH` points a deployed binary at its config file).
 
 ```rust
-let config = crate::global_config::get_config();
+let config = app_config::get_config();
 println!("Model: {}", config.default_llm.default_model);
 ```
 
-Config is loaded in `src-tauri/src/global_config.rs` and **not** imported by `crates/engine` (keep engine config-agnostic unless needed).
+`crates/engine` stays config-agnostic — do not import `app-config` there unless a
+command genuinely needs config; prefer passing values in via the input struct.
 
 ## Testing with appctl
 

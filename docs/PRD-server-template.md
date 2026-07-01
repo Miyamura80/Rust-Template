@@ -134,6 +134,14 @@ trait Command {
   JsonSchema)]` on the input type means CLI flags, the API body schema, and the
   MCP tool schema all come from a single definition (no drift). Commands needing
   bespoke CLI UX can still hand-write a clap command and call the service.
+  - **Implementation note (Phase 2):** the trait bounds `Input` on
+    `DeserializeOwned + JsonSchema + Send` only — it deliberately does **not**
+    require `clap::Args`, so `engine` stays free of any CLI dependency (matching
+    §4.1's "CLI is hand-written, not derived from the registry"). Input structs
+    add `#[derive(clap::Args)]` opt-in when a hand-written/generated CLI
+    subcommand wants to reuse them; that lands with the CLI scaffolding
+    (Phase 5). The current CLI `call` path feeds JSON straight through
+    `Deserialize`, so nothing needs `clap::Args` yet.
 
 - The registry stores **type-erased** entries (an object-safe inner trait that
   takes/returns `serde_json::Value`, with deserialize→run→serialize wrapped

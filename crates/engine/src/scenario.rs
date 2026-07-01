@@ -1,11 +1,11 @@
 //! Scenario runner – execute scripted flows from YAML files.
 
 use crate::commands::CommandRegistry;
-use crate::context::AppContext;
+use crate::context::{AppContext, Ctx};
 use crate::probes;
 use crate::types::*;
 use std::collections::HashMap;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 /// Load a scenario from a YAML string.
 pub fn load_scenario(yaml: &str) -> Result<Scenario, String> {
@@ -65,34 +65,26 @@ async fn execute_step(
             expect_status,
             timeout_ms,
         } => {
-            // NOTE: registry.execute() is synchronous, so the timeout can
-            // only fire between .await points — it will not preempt a
-            // long-running sync command mid-execution. This will work
-            // correctly once async command support is added. For now it
-            // still validates the timeout field and produces the right
-            // error for any command that yields (e.g. probes).
+            // Commands are async, so `tokio::time::timeout` now genuinely
+            // preempts a command that yields at an `.await` point once the
+            // deadline elapses. The per-step `Ctx` also carries the deadline so
+            // a command can consult it.
             let deadline = Duration::from_millis(*timeout_ms);
-            let call_clone = call.clone();
-            let args_clone = args.clone();
+            let cx = Ctx::new(ctx).with_deadline(Instant::now() + deadline);
 
-            let timeout_result = tokio::time::timeout(deadline, async {
-                registry.execute(&call_clone, args_clone, ctx)
-            })
-            .await;
+            let timeout_result =
+                tokio::time::timeout(deadline, registry.execute(call, args.clone(), &cx)).await;
 
             let r = match timeout_result {
                 Ok(result) => result,
-                Err(_elapsed) => {
-                    let run_id = new_run_id();
-                    result_err(
-                        "call",
-                        call,
-                        &run_id,
-                        *timeout_ms,
-                        ErrorCode::Timeout,
-                        format!("step {} ('{}') timed out after {}ms", idx, call, timeout_ms),
-                    )
-                }
+                Err(_elapsed) => result_err(
+                    "call",
+                    call,
+                    &cx.request_id,
+                    *timeout_ms,
+                    ErrorCode::Timeout,
+                    format!("step {} ('{}') timed out after {}ms", idx, call, timeout_ms),
+                ),
             };
 
             let actual_status = serde_json::to_value(r.status)

@@ -10,7 +10,7 @@ use app_config::FrontendConfig;
 // Engine integration
 // ---------------------------------------------------------------------------
 
-use engine::{AppContext, CommandRegistry};
+use engine::{AppContext, CommandRegistry, Ctx};
 use std::sync::OnceLock;
 
 static ENGINE_CTX: OnceLock<AppContext> = OnceLock::new();
@@ -29,9 +29,12 @@ fn engine_registry() -> &'static CommandRegistry {
 // ---------------------------------------------------------------------------
 
 #[tauri::command]
-fn greet(name: &str) -> String {
+async fn greet(name: String) -> String {
     // Simple greeting – delegates to engine ping to prove wiring
-    let result = engine_registry().execute("ping", serde_json::json!({}), engine_ctx());
+    let cx = Ctx::new(engine_ctx());
+    let result = engine_registry()
+        .execute("ping", serde_json::json!({}), &cx)
+        .await;
     format!(
         "Hello, {}! You've been greeted from Rust! (engine status: {:?})",
         name, result.status
@@ -45,8 +48,9 @@ fn get_app_config() -> &'static FrontendConfig {
 
 /// Generic command invocation – call any engine command by name.
 #[tauri::command]
-fn engine_call(cmd: String, args: serde_json::Value) -> serde_json::Value {
-    let result = engine_registry().execute(&cmd, args, engine_ctx());
+async fn engine_call(cmd: String, args: serde_json::Value) -> serde_json::Value {
+    let cx = Ctx::new(engine_ctx());
+    let result = engine_registry().execute(&cmd, args, &cx).await;
     serde_json::to_value(&result).unwrap_or_default()
 }
 

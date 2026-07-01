@@ -1,7 +1,7 @@
 //! Daemon mode – minimal JSON-RPC-ish protocol over Unix socket.
 
 use engine::types::*;
-use engine::{AppContext, CommandRegistry};
+use engine::{AppContext, CommandRegistry, Ctx};
 use std::path::PathBuf;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::UnixListener;
@@ -71,7 +71,8 @@ async fn handle_request(
                 .get("args")
                 .cloned()
                 .unwrap_or(serde_json::Value::Object(Default::default()));
-            registry.execute(cmd_name, args, ctx)
+            let cx = Ctx::new(ctx);
+            registry.execute(cmd_name, args, &cx).await
         }
         "probe" => {
             let target = req

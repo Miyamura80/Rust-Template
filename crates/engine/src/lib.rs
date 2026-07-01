@@ -14,6 +14,6 @@ pub mod traits;
 pub mod types;
 
 // Re-exports for convenience
-pub use commands::CommandRegistry;
-pub use context::AppContext;
+pub use commands::{Command, CommandError, CommandRegistry, CommandSchema, ErasedCommand, Expose};
+pub use context::{AppContext, Ctx};
 pub use types::{CommandResult, ErrorCode, ErrorInfo, Status};

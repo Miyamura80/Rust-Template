@@ -1,8 +1,18 @@
 //! Application context – holds capability trait objects and config.
+//!
+//! Two layers, mirroring the transport design:
+//! - [`AppContext`] holds the shared OS capabilities (fs/net/clipboard). It is
+//!   built once at process/transport start and shared (e.g. behind an `Arc` in
+//!   the HTTP server's state).
+//! - [`Ctx`] is constructed **per request/invocation**, borrowing the shared
+//!   capabilities and carrying request-scoped data (`request_id`, `deadline`).
+//!   Commands receive `&Ctx`. This is the seam where auth/identity would later
+//!   attach — no identity field exists yet, by design.
 
 use crate::platform::{HeadlessClipboard, ReqwestNetwork, StdFilesystem, SystemClipboard};
 use crate::traits::*;
-use crate::types::detect_headless;
+use crate::types::{detect_headless, new_run_id};
+use std::time::Instant;
 
 /// Central context passed to all engine operations.
 ///
@@ -66,5 +76,64 @@ impl AppContext {
 
     pub fn clipboard(&self) -> &dyn ClipboardOps {
         self.clipboard.as_ref()
+    }
+}
+
+/// Per-request context passed to every [`Command`](crate::commands::Command).
+///
+/// Borrows the shared [`AppContext`] capabilities and adds request-scoped
+/// state. Built fresh for each invocation so each request gets its own
+/// `request_id` (and, when set, `deadline`).
+pub struct Ctx<'a> {
+    /// Unique id for this invocation (surfaced as `run_id` in the CLI envelope
+    /// and the `x-run-id` HTTP header).
+    pub request_id: String,
+    /// Optional wall-clock deadline for this invocation. Enforcement lives in
+    /// the transport (scenario runner / tower timeout); commands may consult it.
+    pub deadline: Option<Instant>,
+    caps: &'a AppContext,
+}
+
+impl<'a> Ctx<'a> {
+    /// Build a per-request context over shared capabilities with a fresh id.
+    pub fn new(caps: &'a AppContext) -> Self {
+        Self {
+            request_id: new_run_id(),
+            deadline: None,
+            caps,
+        }
+    }
+
+    /// Build a context with a caller-supplied request id (e.g. an incoming
+    /// `x-run-id`/trace header).
+    pub fn with_request_id(caps: &'a AppContext, request_id: impl Into<String>) -> Self {
+        Self {
+            request_id: request_id.into(),
+            deadline: None,
+            caps,
+        }
+    }
+
+    /// Attach a deadline (builder-style).
+    pub fn with_deadline(mut self, deadline: Instant) -> Self {
+        self.deadline = Some(deadline);
+        self
+    }
+
+    /// The shared capability bundle.
+    pub fn caps(&self) -> &AppContext {
+        self.caps
+    }
+
+    pub fn fs(&self) -> &dyn FilesystemOps {
+        self.caps.fs()
+    }
+
+    pub fn network(&self) -> &dyn NetworkOps {
+        self.caps.network()
+    }
+
+    pub fn clipboard(&self) -> &dyn ClipboardOps {
+        self.caps.clipboard()
     }
 }
