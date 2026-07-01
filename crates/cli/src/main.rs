@@ -91,18 +91,6 @@ enum Commands {
         #[arg(long)]
         port: Option<u16>,
     },
-
-    /// Emit a desktop event (skeleton – returns UNIMPLEMENTED).
-    Emit {
-        /// Event type: tray-click | deep-link | file-drop | app-focus
-        event: String,
-        /// Optional event payload as JSON.
-        #[arg(long, default_value = "{}")]
-        payload: String,
-        /// Output as JSON.
-        #[arg(long)]
-        json: bool,
-    },
 }
 
 // ===========================================================================
@@ -150,11 +138,6 @@ async fn main() {
             let port = port.unwrap_or(cfg.port);
             serve_http::run_server(host, port, ctx, registry).await
         }
-        Commands::Emit {
-            event,
-            payload: _,
-            json,
-        } => cmd_emit(&event, json).await,
     }
 }
 
@@ -362,42 +345,6 @@ async fn cmd_run_scenario(
         }
         let _ = std::fs::write(&events_path, lines);
     }
-}
-
-async fn cmd_emit(event: &str, json: bool) {
-    let run_id = new_run_id();
-    let headless = detect_headless();
-
-    let (status, code, msg) = if headless {
-        (
-            Status::Skip,
-            ErrorCode::Unsupported,
-            format!("event '{}' unsupported in headless environment", event),
-        )
-    } else {
-        (
-            Status::Skip,
-            ErrorCode::Unimplemented,
-            format!("event '{}' is not yet implemented (skeleton)", event),
-        )
-    };
-
-    let result = CommandResult {
-        run_id,
-        command: "emit".to_string(),
-        target: event.to_string(),
-        status,
-        error: Some(ErrorInfo {
-            code,
-            message: msg,
-            details: serde_json::Value::Null,
-        }),
-        timing_ms: TimingInfo::default(),
-        artifacts: vec![],
-        env_summary: EnvSummary::default(),
-        data: None,
-    };
-    output_result(&result, json);
 }
 
 // ===========================================================================

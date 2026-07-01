@@ -10,11 +10,23 @@ use image::codecs::png::PngEncoder;
 use image::imageops::{invert, resize, FilterType};
 use image::ImageEncoder;
 use image::{ColorType, DynamicImage, GenericImage, ImageBuffer, Rgba, RgbaImage};
+use app_config as config;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use tauri_app_lib::{config, logging};
 use tracing::{error, info, warn};
+
+/// Minimal standalone logging for this dev tool (the engine/server crates own
+/// their own logging setup).
+fn init_logging() {
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
+        )
+        .with_writer(std::io::stderr)
+        .try_init();
+}
 
 const IMAGE_MODEL: &str = "gemini-3-pro-image-preview";
 const IMAGE_PROMPT_STYLE: &str = "Create a minimalist, modern horizontal wordmark logo (4:1 aspect) with an icon on the left and clear text on the right. Use dark tones, clean typography, and avoid photorealism. The background should be bright lime green (#00FF00) to act as a greenscreen, but keep the logo colors distinct and readable.";
@@ -65,7 +77,7 @@ async fn main() -> Result<()> {
     // Install ring as the rustls crypto provider (reqwest needs this with rustls-no-provider)
     let _ = rustls::crypto::ring::default_provider().install_default();
 
-    logging::init_logging();
+    init_logging();
     let cli = Cli::parse();
     let client = GeminiClient::new()?;
 
@@ -95,7 +107,7 @@ async fn run_logo(
         Some(name) => name,
         None => read_project_name(&workspace)
             .await
-            .unwrap_or_else(|_| "Tauri-Template".into()),
+            .unwrap_or_else(|_| "Rust-Template".into()),
     };
     let target = output_dir.unwrap_or_else(|| workspace.join("docs").join("public"));
     tokio::fs::create_dir_all(&target)
@@ -158,53 +170,9 @@ async fn run_logo(
     save_png(&icon_dark_512, &target.join("icon-dark.png"))?;
     save_ico(&favicon_32, &target.join("favicon.ico"))?;
 
-    // Use `cargo tauri icon` to generate all platform icons (png, ico, icns)
-    // from the source image. This handles the Apple ICNS binary format correctly.
-    // Save a 1024x1024 source so tauri icon has enough resolution for all sizes.
-    let source_icon =
-        std::env::temp_dir().join(format!("icon-source-1024-{}.png", std::process::id()));
+    // Also emit a 1024x1024 source icon (useful for docs / social cards).
     let icon_1024 = resize(&icon_light_square, 1024, 1024, FilterType::Lanczos3);
-    save_png(&icon_1024, &source_icon)?;
-
-    let tauri_icon_status: Result<std::process::ExitStatus, std::io::Error> =
-        tokio::process::Command::new("cargo")
-            .args(["tauri", "icon"])
-            .arg(&source_icon)
-            .current_dir(&workspace)
-            .status()
-            .await;
-
-    let needs_fallback = match tauri_icon_status {
-        Ok(s) if s.success() => {
-            info!("Tauri app icons generated via `cargo tauri icon`");
-            false
-        }
-        Ok(s) => {
-            warn!("`cargo tauri icon` exited with {s}, falling back to manual icon copy");
-            true
-        }
-        Err(e) => {
-            warn!("Failed to run `cargo tauri icon`: {e}, falling back to manual icon copy");
-            true
-        }
-    };
-
-    let fallback_result = if needs_fallback {
-        let tauri_icons_dir = workspace.join("src-tauri").join("icons");
-        if tauri_icons_dir.exists() {
-            let r1 = save_png(&icon_1024, &tauri_icons_dir.join("icon.png"));
-            let r2 = save_ico(&favicon_32, &tauri_icons_dir.join("icon.ico"));
-            r1.and(r2)
-        } else {
-            Ok(())
-        }
-    } else {
-        Ok(())
-    };
-
-    // Clean up the temporary 1024x1024 source before propagating any error
-    std::fs::remove_file(&source_icon).ok();
-    fallback_result?;
+    save_png(&icon_1024, &target.join("icon-1024.png"))?;
 
     info!("Logo assets saved to {}", target.display());
     Ok(())
@@ -222,7 +190,7 @@ async fn run_banner(
         Some(t) => t,
         None => read_project_name(&workspace)
             .await
-            .unwrap_or_else(|_| "Tauri-Template".into()),
+            .unwrap_or_else(|_| "Rust-Template".into()),
     };
     let target = output_dir.unwrap_or_else(|| workspace.join("media"));
     tokio::fs::create_dir_all(&target)
@@ -267,7 +235,7 @@ async fn run_banner(
 
     let banner = if let Some(ref icon_img) = icon_image {
         let full_prompt = format!(
-            "{banner_description}. Create a WIDE 16:9 horizontal image where the banner takes up 80% of the screen and the text '{title}' is centered at the top with excellent contrast. {BANNER_STYLE_PROMPT} IMPORTANT: Use the provided icon/logo as the main visual element in the banner — do NOT use the default Tauri crab icon. Incorporate this exact icon prominently in the composition.",
+            "{banner_description}. Create a WIDE 16:9 horizontal image where the banner takes up 80% of the screen and the text '{title}' is centered at the top with excellent contrast. {BANNER_STYLE_PROMPT} IMPORTANT: Use the provided icon/logo as the main visual element in the banner — do NOT use a default placeholder icon. Incorporate this exact icon prominently in the composition.",
         );
         client
             .generate_image_from_reference(IMAGE_MODEL, &full_prompt, icon_img)
@@ -350,9 +318,12 @@ fn ensure_square(image: &RgbaImage) -> Result<RgbaImage> {
 }
 
 fn workspace_root() -> Result<PathBuf> {
+    // This crate lives at `<workspace>/crates/assetgen`, so the workspace root
+    // is two directories up from the manifest dir.
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
     Path::new(manifest_dir)
-        .parent()
+        .ancestors()
+        .nth(2)
         .map(Path::to_path_buf)
         .ok_or_else(|| anyhow!("Unable to determine workspace root"))
 }

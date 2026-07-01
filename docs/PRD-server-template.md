@@ -442,6 +442,16 @@ All prior open questions are now decided (see §13 for the packaging detail):
   release CI: per-OS binary builds (linux/macos/windows), shell + PowerShell
   installers, and GitHub Release artifacts. Replaces the Tauri `release.yml`.
   The released artifact is the `appctl` binary (CLI + `serve`).
+  - **Implementation note (Phase 4):** `dist-workspace.toml` is committed as the
+    cargo-dist source of truth. The generated pipeline could not be produced in
+    the build container (`dist init` unavailable), so `release.yml` currently
+    ships as a functional cross-platform `cargo build` → GitHub Release baseline;
+    running `dist init && dist generate ci` regenerates the canonical
+    installer-producing workflow from the config.
+  - **Frontend deps (Phase 4):** the runtime `@tauri-apps/*` packages stay in
+    `package.json` for now because the React `src/` still imports them; they are
+    removed together with the `invoke()`→`fetch()` conversion in Phase 6. Only
+    the `tauri` npm script and `@tauri-apps/cli` were dropped here.
 - **`Dockerfile`** — multi-stage: `cargo build --release -p appctl` in a builder
   stage, copy the binary into a slim runtime base (distroless/debian-slim),
   `EXPOSE` the configured port, `ENTRYPOINT ["appctl", "serve"]`. Host/port and

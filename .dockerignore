@@ -1,0 +1,10 @@
+target/
+node_modules/
+frontend/
+docs/
+.git/
+.github/
+*.md
+media/
+dist/
+build/

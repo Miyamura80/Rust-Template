@@ -1,15 +1,13 @@
 //! Application configuration, shared across every transport (CLI, HTTP API,
 //! and future MCP).
 //!
-//! [`AppConfig`] is the full configuration including secret credentials;
-//! [`FrontendConfig`] is the sanitized projection safe to expose to a browser
-//! over HTTP. The sanitizer is a **security boundary** — no secret field may
-//! ever cross it (enforced by `#[serde(skip_serializing)]` and covered by the
-//! tests in this crate).
-//!
-//! Config is loaded from `global_config.yaml` (next to this crate by default,
-//! or `APP_CONFIG_PATH`), layered with an optional `production_config.yaml` /
-//! `.global_config.yaml`, then overridden by `APP__`-prefixed env vars.
+//! [`AppConfig`] is the full config including secret credentials;
+//! [`FrontendConfig`] is the sanitized projection safe to expose over HTTP. The
+//! sanitizer is a **security boundary** — no secret field may ever cross it
+//! (enforced by `#[serde(skip_serializing)]` and covered by tests here). Config
+//! loads from `global_config.yaml` (next to this crate, or `APP_CONFIG_PATH`),
+//! layered with optional `production_config.yaml` / `.global_config.yaml`, then
+//! overridden by `APP__`-prefixed env vars.
 
 use config::{Config, ConfigError, Environment, File};
 use serde::{Deserialize, Serialize};
