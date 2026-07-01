@@ -5,12 +5,6 @@ description: Interview the user, inspect this template repo, run headless onboar
 
 # Onboarding
 
-> **STATUS: PLANNING DRAFT.** This skill targets `appctl init` / `make init`,
-> which do **not exist yet** — they are specified in `docs/PRD-server-template.md`
-> §8c and land in Phase 5 of that plan. Until then, treat this as the intended
-> flow, not an executable runbook. Do not run the commands below until
-> `crates/cli/src/init/` exists. Remove this banner when Phase 5 ships.
-
 Use this skill when the user wants to turn this template into a real project,
 especially when they invoke `/onboarding`, ask to run onboarding, or want to
 remove unused template systems.
@@ -35,7 +29,8 @@ other.
      `frontend/`, `Dockerfile`, `docs/` site, release CI (`.github/workflows/`)
 
 2. Interview the user briefly. Prefer grouped multi-select questions:
-   - Project shape (`--profile`): `cli-only`, `server-only`, `cli+server`, or `custom`
+   - Project shape (`--profile`): `cli-only`, `server-only`, or `cli+server`
+     (for a custom shape, skip `--profile` and drive `--surfaces`/`--config`)
    - Service surfaces (`--surfaces`): `cli`, `http_api` (and `mcp` once that
      transport exists)
    - Optional extras: frontend (`--frontend`, the optional Bun/React viz app),

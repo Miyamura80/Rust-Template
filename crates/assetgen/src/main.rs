@@ -3,6 +3,7 @@ use std::io::Cursor;
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Context, Result};
+use app_config as config;
 use base64::{engine::general_purpose, Engine as _};
 use clap::{Parser, Subcommand};
 use image::codecs::ico::IcoEncoder;
@@ -10,7 +11,6 @@ use image::codecs::png::PngEncoder;
 use image::imageops::{invert, resize, FilterType};
 use image::ImageEncoder;
 use image::{ColorType, DynamicImage, GenericImage, ImageBuffer, Rgba, RgbaImage};
-use app_config as config;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;

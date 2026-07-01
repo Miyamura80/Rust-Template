@@ -59,7 +59,7 @@ docs: ## Run docs with bun
 ########################################################
 
 ### Initialization
-.PHONY: setup init banner logo
+.PHONY: setup init new banner logo
 
 setup: ## Set up dev environment from scratch (installs deps, copies .env, checks tooling)
 	@echo "$(BLUE)🔧 Setting up dev environment...$(RESET)"
@@ -81,18 +81,20 @@ setup: ## Set up dev environment from scratch (installs deps, copies .env, check
 	fi
 	@echo "$(GREEN)✅ Setup complete. Run 'make run' to start the server.$(RESET)"
 
-init: ## Initialize project (usage: make init name=my-project description="my description")
-	@if [ -z "$(name)" ] || [ -z "$(description)" ]; then \
-		echo "$(RED)Error: Both 'name' and 'description' parameters are required$(RESET)"; \
-		echo "Usage: make init name=<project_name> description=<project_description>"; \
+init: ## Onboard the template into a real project (appctl init). Bare = wizard; PROFILE=/CONFIG=/DRY_RUN=1/ARGS= for headless.
+	@cargo run -q -p appctl -- init \
+		$(if $(PROFILE),--profile $(PROFILE),) \
+		$(if $(CONFIG),--config $(CONFIG),) \
+		$(if $(DRY_RUN),--dry-run,) \
+		$(ARGS)
+
+new: ## Scaffold a new engine command (usage: make new name=fetch_url [description="..."])
+	@if [ -z "$(name)" ]; then \
+		echo "$(RED)Error: 'name' is required$(RESET)"; \
+		echo "Usage: make new name=<command_name> [description=\"...\"]"; \
 		exit 1; \
 	fi
-	@echo "$(YELLOW)🚀 Initializing project $(name)...$(RESET)"
-	@sed -i.bak "s/\"name\": \"tauri-app\"/\"name\": \"$(name)\"/" package.json && rm package.json.bak
-	@sed -i.bak "s/# Rust-Template/# $(name)/" README.md && rm README.md.bak
-	@sed -i.bak "s/<b>agent ready tauri template<\/b>/<b>$(description)<\/b>/" README.md && rm README.md.bak
-	@echo "$(GREEN)✅ Updated project name and description.$(RESET)"
-	@echo "$(YELLOW)Note: the richer 'appctl init' onboarding lands in Phase 5 (see docs/PRD-server-template.md §8c).$(RESET)"
+	@cargo run -q -p appctl -- new $(name) $(if $(description),--description "$(description)",)
 
 ### Asset Generation
 .PHONY: banner logo

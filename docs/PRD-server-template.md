@@ -359,6 +359,29 @@ declared source-of-truth file (`crates/cli/src/init/config.rs`).
 > want it, the typed `Command` registry should collect entries via `inventory`
 > rather than a hand-maintained `register()` list.
 
+### D. Implementation notes (Phase 5)
+
+- **Surface pruning is cargo-feature based, not source surgery.** The two Rust
+  surfaces are gated behind `appctl` crate features `cli` (diagnostic
+  subcommands) and `http-api` (axum `serve` + tower stack), both in `default`.
+  Pruning a surface drops its feature from the `default` list (via `toml_edit`,
+  format-preserving) and deletes the now-unreferenced files (e.g.
+  `serve_http.rs`). Because the code is `#[cfg(...)]`-gated, every combination
+  compiles cleanly under `clippy -D warnings` — no dead code, no fragile match
+  editing. `Init`/`New` stay ungated so onboarding/scaffolding always work.
+- **Prune scope this iteration:** the `cli`/`http-api` surface features,
+  `frontend` (`src/`, `index.html`, `vite.config.ts`, package.json frontend
+  deps/scripts), `docs` (`docs/` + package.json workspace entry), and `docker`
+  (`Dockerfile`, `.dockerignore`). `expand()` encodes the implications
+  (`frontend ⇒ http_api`; dropping `http_api` drops `frontend`+`docker`).
+- **`command.rs.tpl` is embedded** via `include_str!`, so `appctl new` works
+  from any cwd. It writes `crates/engine/src/commands/<name>.rs` and inserts a
+  sorted `mod <name>;` line — the only wiring `inventory` can't do at link time.
+- **`.env` bootstrap** copies `.env.example → .env` (existence-guarded);
+  interactive per-secret masking (reference's `env.rs`) is left for a later pass.
+- Every mutator (rename/prune/env) is idempotent and dry-run-first; the wizard
+  gates any real apply behind a confirmation.
+
 ## 9. Teardown checklist (Tauri/desktop removal)
 
 - Delete `src-tauri/` (lib.rs, main.rs, logging.rs, global_config, capabilities,

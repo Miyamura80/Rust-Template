@@ -37,6 +37,10 @@ CLI args, the HTTP body schema, and the future MCP tool schema) and
 **self-register at link time** via `register_command!` — there is no
 hand-maintained registration list.
 
+The fastest path is the scaffolder: `appctl new <name>` (or `make new
+name=<name>`) generates the file below from `templates/command.rs.tpl` and
+inserts the `mod <name>;` line for you. To do it by hand:
+
 1. Drop a new file `crates/engine/src/commands/my_command.rs`:
 
 ```rust
