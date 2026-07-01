@@ -353,8 +353,9 @@ declared source-of-truth file (`crates/cli/src/init/config.rs`).
 
 ## 9. Teardown checklist (Tauri/desktop removal)
 
-- Delete `src-tauri/` (lib.rs, main.rs, logging.rs, asset_gen.rs, global_config,
-  capabilities, icons, tauri.conf.json, build.rs).
+- Delete `src-tauri/` (lib.rs, main.rs, logging.rs, global_config, capabilities,
+  icons, tauri.conf.json, build.rs). **First relocate `asset_gen.rs`** — it is
+  kept (see below), so move it out before deleting the crate.
 - Remove `src-tauri` from workspace members; add `crates/config`.
 - `package.json`: drop `@tauri-apps/*`, `tauri` script; rename app; move to
   `frontend/`.
@@ -362,10 +363,15 @@ declared source-of-truth file (`crates/cli/src/init/config.rs`).
   serve`) / `cargo build`; fix `test` to `cargo test --workspace` (currently
   `cd src-tauri && cargo test`).
 - CI: `rust_checks.yaml` — drop GTK/WebKit apt deps; `build_verification.yaml`
-  — replace `tauri build` with `cargo build --workspace`; remove/replace
-  `release.yml` (Tauri bundling, signing) with a binary release if wanted.
-- Remove asset-gen (Gemini icon/banner pipeline) and `make banner`/`logo`, or
-  decouple from desktop assets.
+  — replace `tauri build` with `cargo build --workspace`; **replace `release.yml`
+  with `cargo-dist`** (§13) for cross-platform binary releases + installers.
+- **Keep asset-gen**, but relocate it out of `src-tauri` into its own crate
+  (e.g. `crates/assetgen`, a `[[bin]]`). Keep `make banner`/`logo` (still needs
+  `APP__GEMINI_API_KEY`). Repoint output paths (logos → `docs/public/`, banner →
+  `media/`) since they no longer serve desktop icons.
+- **Keep the `docs/` Next.js site** and its Jules translation workflow — it's
+  backend-independent. Reframe its content from Tauri to server/CLI.
+- Add a **`Dockerfile`** for the server (§13).
 - Clean orphan `crates/onboard/` (delete, or promote to a real crate).
 - Docs: rewrite `README.md`, `CLAUDE.md` (Tauri → server framing), update
   `update-backend`/`code-quality` skills, archive the old `docs/PRD.md`.
@@ -385,9 +391,10 @@ Phase 3  HTTP API:  axum `serve` reusing registry; /api/v1 routes; bare-output
                     body + run_id header; CORS/trace/request-id/timeout;
                     graceful shutdown. Add 5.1 integration tests. Retire UDS
                     daemon. Tree green.
-Phase 4  Teardown:  delete src-tauri + tauri frontend deps; swap example
-                    commands (8b); fix workspace, Makefile, CI; clean orphan
-                    crate. Pure server+CLI. Green.
+Phase 4  Teardown:  relocate asset-gen → crates/assetgen; delete src-tauri +
+                    tauri frontend deps; swap example commands (8b); fix
+                    workspace, Makefile, CI; add cargo-dist + Dockerfile (§13);
+                    clean orphan crate. Pure server+CLI. Green.
 Phase 5  Scaffold:  rebuild `make init` + onboarding (8c, per subagent report).
 Phase 6  Frontend:  move src→frontend, convert invoke()→fetch(); optional.
 Phase 7  MCP stub + docs/README/CLAUDE rewrite; final CI + prek pass.
@@ -407,10 +414,31 @@ is deleted, so the core always compiles standalone.
 | `clipboard`/`emit` commands meaningless server-side | Swap for server-relevant examples; add async `http_request` (see 8b). |
 | `async-trait` + type erasure interacts awkwardly | Inner object-safe trait is `async` too; box futures at the erasure boundary. Validated by Phase 2 before any transport depends on it. |
 
-## 12. Open questions
+## 12. Resolved decisions
 
-- Release strategy after dropping Tauri bundles: ship CLI binaries via
-  `cargo-dist` / GitHub Releases, or out of scope?
-- Keep asset-gen (Gemini) at all, or remove with desktop branding?
-- Frontend: keep React, or is a minimal static page enough for "visualization"?
+All prior open questions are now decided (see §13 for the packaging detail):
+
+- **Release:** `cargo-dist` — cross-platform binaries + installers, replacing
+  `release.yml`.
+- **asset-gen:** kept, relocated out of `src-tauri` into its own crate.
+- **docs site:** kept (reframed Tauri → server); Jules translation workflow stays.
+- **Dockerfile:** added, for the server.
+- **Frontend:** convert the existing React/Vite app to a `fetch`-based `/api/v1`
+  client (Phase 6) — not slimmed, not removed.
+- **Auth/identity:** deliberately deferred — `Ctx` carries no `user_id` yet; the
+  middleware seam is left open (see §4.1).
+
+## 13. Packaging & deployment
+
+- **`cargo-dist`** (`dist-workspace.toml` / `cargo dist init`) generates the
+  release CI: per-OS binary builds (linux/macos/windows), shell + PowerShell
+  installers, and GitHub Release artifacts. Replaces the Tauri `release.yml`.
+  The released artifact is the `appctl` binary (CLI + `serve`).
+- **`Dockerfile`** — multi-stage: `cargo build --release -p appctl` in a builder
+  stage, copy the binary into a slim runtime base (distroless/debian-slim),
+  `EXPOSE` the configured port, `ENTRYPOINT ["appctl", "serve"]`. Host/port and
+  config via env (`APP__…`, `APP_CONFIG_PATH`). `.dockerignore` excludes
+  `target/`, `node_modules/`, `frontend/`.
+- Both are **onboarding-prunable** and land in the surface config so
+  `server-only` vs `cli-only` projects keep only what applies.
 ```
