@@ -414,6 +414,7 @@ mod tests {
                 },
                 redaction: RedactionConfig::default(),
             },
+            server: ServerConfig::default(),
             features: HashMap::new(),
             openai_api_key: None,
             anthropic_api_key: None,

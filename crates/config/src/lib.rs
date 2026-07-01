@@ -28,6 +28,8 @@ pub struct AppConfig {
     pub llm_config: LlmConfig,
     pub logging: LoggingConfig,
     #[serde(default)]
+    pub server: ServerConfig,
+    #[serde(default)]
     pub features: HashMap<String, bool>,
 
     // Secret credentials (optional in config file, usually injected via env).
@@ -98,6 +100,23 @@ fn default_dev_env() -> String {
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct ExampleParent {
     pub example_child: String,
+}
+
+/// HTTP server bind settings for `appctl serve`. Overridable via
+/// `APP__SERVER__HOST` / `APP__SERVER__PORT` or CLI flags.
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct ServerConfig {
+    pub host: String,
+    pub port: u16,
+}
+
+impl Default for ServerConfig {
+    fn default() -> Self {
+        Self {
+            host: "127.0.0.1".to_string(),
+            port: 8080,
+        }
+    }
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -429,6 +448,7 @@ mod tests {
                 },
                 redaction: RedactionConfig::default(),
             },
+            server: ServerConfig::default(),
             features: HashMap::new(),
             openai_api_key: Some("secret-key".to_string()),
             anthropic_api_key: None,

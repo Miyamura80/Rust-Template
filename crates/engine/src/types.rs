@@ -168,27 +168,6 @@ pub struct ScenarioResult {
 }
 
 // ---------------------------------------------------------------------------
-// Serve / daemon protocol
-// ---------------------------------------------------------------------------
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DaemonRequest {
-    pub id: String,
-    pub method: String,
-    #[serde(default)]
-    pub params: serde_json::Value,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DaemonResponse {
-    pub id: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub result: Option<CommandResult>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub error: Option<ErrorInfo>,
-}
-
-// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 

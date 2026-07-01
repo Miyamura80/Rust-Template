@@ -3,7 +3,7 @@
 //! Runs the same engine logic that powers the GUI, but without a window
 //! server. Designed for VM-based compatibility testing on macOS + Linux.
 
-mod serve;
+mod serve_http;
 
 use clap::{Parser, Subcommand};
 use engine::types::*;
@@ -82,11 +82,14 @@ enum Commands {
         interactive: bool,
     },
 
-    /// Start daemon mode over a Unix socket.
+    /// Start the HTTP API server (axum). Host/port default from config.
     Serve {
-        /// Path for the Unix domain socket.
+        /// Bind host (overrides config `server.host`).
         #[arg(long)]
-        socket: PathBuf,
+        host: Option<String>,
+        /// Bind port (overrides config `server.port`).
+        #[arg(long)]
+        port: Option<u16>,
     },
 
     /// Emit a desktop event (skeleton – returns UNIMPLEMENTED).
@@ -141,7 +144,12 @@ async fn main() {
             json,
             interactive,
         } => cmd_run_scenario(&file, json, interactive, artifacts, &ctx, &registry).await,
-        Commands::Serve { socket } => serve::run_daemon(socket, ctx, registry).await,
+        Commands::Serve { host, port } => {
+            let cfg = &app_config::get_config().server;
+            let host = host.unwrap_or_else(|| cfg.host.clone());
+            let port = port.unwrap_or(cfg.port);
+            serve_http::run_server(host, port, ctx, registry).await
+        }
         Commands::Emit {
             event,
             payload: _,
