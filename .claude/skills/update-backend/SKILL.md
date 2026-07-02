@@ -124,7 +124,7 @@ impl NetworkOps for OfflineNetwork {
 }
 ```
 
-Inject via `AppContext` — the real platform capabilities in `appctl` (`AppContext::default_platform()`), headless stubs in tests (`AppContext::default_headless()`).
+Inject via `AppContext` — `AppContext::default()` wires the real platform capabilities (used by `appctl`); pass stub implementations to `AppContext::new(fs, network)` to run a command against fakes in tests.
 
 ## Configuration
 

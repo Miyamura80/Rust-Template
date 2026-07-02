@@ -16,8 +16,10 @@ use std::time::Instant;
 
 /// Central context passed to all engine operations.
 ///
-/// Holds trait-object capabilities so callers (CLI / HTTP API / tests) can swap
-/// implementations (e.g. headless stubs vs real platform capabilities).
+/// Holds trait-object capabilities. [`AppContext::default`] wires the real
+/// platform implementations; [`AppContext::new`] is the injection seam — pass
+/// stub capabilities to it to run a command against fakes (e.g. an offline test
+/// filesystem/network).
 pub struct AppContext {
     fs: Box<dyn FilesystemOps>,
     network: Box<dyn NetworkOps>,
@@ -25,29 +27,22 @@ pub struct AppContext {
     pub network_probe_host: String,
 }
 
+impl Default for AppContext {
+    /// Wire the real platform capabilities. Use [`AppContext::new`] to inject
+    /// stub implementations instead.
+    fn default() -> Self {
+        Self::new(Box::new(StdFilesystem), Box::new(ReqwestNetwork))
+    }
+}
+
 impl AppContext {
+    /// Build a context over caller-supplied capabilities. This is the seam for
+    /// injecting stubs (tests, offline runs); [`AppContext::default`] wires the
+    /// real platform ones.
     pub fn new(fs: Box<dyn FilesystemOps>, network: Box<dyn NetworkOps>) -> Self {
         Self {
             fs,
             network,
-            network_probe_host: "https://httpbin.org/get".to_string(),
-        }
-    }
-
-    /// Create a context with real platform implementations.
-    pub fn default_platform() -> Self {
-        Self {
-            fs: Box::new(StdFilesystem),
-            network: Box::new(ReqwestNetwork),
-            network_probe_host: "https://httpbin.org/get".to_string(),
-        }
-    }
-
-    /// Create a context suitable for headless / CI environments.
-    pub fn default_headless() -> Self {
-        Self {
-            fs: Box::new(StdFilesystem),
-            network: Box::new(ReqwestNetwork),
             network_probe_host: "https://httpbin.org/get".to_string(),
         }
     }

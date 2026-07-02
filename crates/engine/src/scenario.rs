@@ -298,7 +298,7 @@ steps:
     expect_status: "pass"
 "#;
         let scenario = load_scenario(yaml).unwrap();
-        let ctx = AppContext::default_headless();
+        let ctx = AppContext::default();
         let reg = CommandRegistry::new();
         let result = run_scenario(&scenario, &ctx, &reg).await;
         assert_eq!(result.overall_status, Status::Pass);
@@ -352,7 +352,7 @@ steps:
                 },
             ],
         };
-        let ctx = AppContext::default_headless();
+        let ctx = AppContext::default();
         let reg = CommandRegistry::new();
 
         let call_count = std::cell::Cell::new(0usize);
@@ -417,7 +417,7 @@ steps:
     expect_status: "pass"
 "#;
         let scenario = load_scenario(yaml).unwrap();
-        let ctx = AppContext::default_headless();
+        let ctx = AppContext::default();
         let reg = CommandRegistry::new();
 
         let result = run_scenario_interactive(
@@ -447,7 +447,7 @@ steps:
     expect_status: "pass"
 "#;
         let scenario = load_scenario(yaml).unwrap();
-        let ctx = AppContext::default_headless();
+        let ctx = AppContext::default();
         let reg = CommandRegistry::new();
 
         let result = run_scenario_interactive(
@@ -487,7 +487,7 @@ steps:
     expect_status: "pass"
 "#;
         let scenario = load_scenario(yaml).unwrap();
-        let ctx = AppContext::default_headless();
+        let ctx = AppContext::default();
         let reg = CommandRegistry::new();
 
         let result = run_scenario_interactive(
@@ -525,7 +525,7 @@ steps:
     expect_status: "pass"
 "#;
         let scenario = load_scenario(yaml).unwrap();
-        let ctx = AppContext::default_headless();
+        let ctx = AppContext::default();
         let reg = CommandRegistry::new();
 
         let result = run_scenario_interactive(
@@ -566,7 +566,7 @@ steps:
     expect_status: "pass"
 "#;
         let scenario = load_scenario(yaml).unwrap();
-        let ctx = AppContext::default_headless();
+        let ctx = AppContext::default();
         let reg = CommandRegistry::new();
 
         let call_count = std::cell::Cell::new(0usize);
@@ -624,7 +624,7 @@ steps:
                 timeout_ms: 5_000,
             }],
         };
-        let ctx = AppContext::default_headless();
+        let ctx = AppContext::default();
         let reg = CommandRegistry::new();
         let result = run_scenario(&scenario, &ctx, &reg).await;
         assert_eq!(result.overall_status, Status::Pass);

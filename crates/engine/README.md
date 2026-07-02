@@ -36,7 +36,7 @@ and (later) MCP; the same registry serves every transport.
 use engine::{AppContext, CommandRegistry, Ctx};
 
 // Shared capabilities built once; a lightweight Ctx is built per invocation.
-let caps = AppContext::default_platform();
+let caps = AppContext::default();
 let registry = CommandRegistry::new();
 let cx = Ctx::new(&caps);
 

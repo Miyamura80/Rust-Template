@@ -158,7 +158,7 @@ async fn main() {
             timeout: _,
             artifacts,
         } => {
-            let ctx = AppContext::default_platform();
+            let ctx = AppContext::default();
             let registry = CommandRegistry::new();
             cmd_call(&cmd, &args, json, artifacts, &ctx, &registry).await
         }
@@ -168,7 +168,7 @@ async fn main() {
             json,
             artifacts,
         } => {
-            let ctx = AppContext::default_platform();
+            let ctx = AppContext::default();
             cmd_probe(&target, json, artifacts, &ctx).await
         }
         #[cfg(feature = "cli")]
@@ -178,13 +178,13 @@ async fn main() {
             json,
             interactive,
         } => {
-            let ctx = AppContext::default_platform();
+            let ctx = AppContext::default();
             let registry = CommandRegistry::new();
             cmd_run_scenario(&file, json, interactive, artifacts, &ctx, &registry).await
         }
         #[cfg(feature = "http-api")]
         Commands::Serve { host, port } => {
-            let ctx = AppContext::default_platform();
+            let ctx = AppContext::default();
             let registry = CommandRegistry::new();
             let cfg = &app_config::get_config().server;
             let host = host.unwrap_or_else(|| cfg.host.clone());

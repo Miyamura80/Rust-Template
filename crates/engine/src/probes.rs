@@ -141,67 +141,65 @@ async fn probe_network(ctx: &AppContext) -> CommandResult {
 
     // Step 1: DNS resolve
     let t0 = Instant::now();
-    match ctx.network().dns_resolve(dns_host).await {
-        Ok(addrs) => {
-            steps.insert("dns_resolve".into(), t0.elapsed().as_millis() as u64);
-
-            // Step 2: HTTPS GET
-            let t1 = Instant::now();
-            match ctx.network().https_get(host, 10_000).await {
-                Ok((status, _snippet)) => {
-                    steps.insert("https_get".into(), t1.elapsed().as_millis() as u64);
-
-                    // Collect proxy env vars
-                    let proxy_vars = collect_proxy_env();
-
-                    let mut r = result_ok(
-                        "probe",
-                        "network",
-                        &run_id,
-                        start.elapsed().as_millis() as u64,
-                    );
-                    r.timing_ms.steps = steps;
-                    r.data = Some(serde_json::json!({
-                        "dns_addresses": addrs,
-                        "http_status": status,
-                        "target_url": host,
-                        "proxy_env": proxy_vars,
-                    }));
-                    r
-                }
-                Err(e) => {
-                    steps.insert("https_get".into(), t1.elapsed().as_millis() as u64);
-                    let code = match &e {
-                        CapError::Timeout => ErrorCode::Timeout,
-                        _ => ErrorCode::NetworkError,
-                    };
-                    let mut r = result_err(
-                        "probe",
-                        "network",
-                        &run_id,
-                        start.elapsed().as_millis() as u64,
-                        code,
-                        format!("HTTPS GET failed: {}", e),
-                    );
-                    r.timing_ms.steps = steps;
-                    r
-                }
-            }
-        }
+    let addrs = match ctx.network().dns_resolve(dns_host).await {
+        Ok(addrs) => addrs,
         Err(e) => {
             steps.insert("dns_resolve".into(), t0.elapsed().as_millis() as u64);
-            let mut r = result_err(
-                "probe",
-                "network",
-                &run_id,
-                start.elapsed().as_millis() as u64,
-                ErrorCode::NetworkError,
-                format!("DNS resolution failed: {}", e),
-            );
-            r.timing_ms.steps = steps;
-            r
+            let msg = format!("DNS resolution failed: {}", e);
+            return probe_net_err(&run_id, start, steps, ErrorCode::NetworkError, msg);
         }
-    }
+    };
+    steps.insert("dns_resolve".into(), t0.elapsed().as_millis() as u64);
+
+    // Step 2: HTTPS GET
+    let t1 = Instant::now();
+    let status = match ctx.network().https_get(host, 10_000).await {
+        Ok((status, _snippet)) => status,
+        Err(e) => {
+            steps.insert("https_get".into(), t1.elapsed().as_millis() as u64);
+            let code = match &e {
+                CapError::Timeout => ErrorCode::Timeout,
+                _ => ErrorCode::NetworkError,
+            };
+            let msg = format!("HTTPS GET failed: {}", e);
+            return probe_net_err(&run_id, start, steps, code, msg);
+        }
+    };
+    steps.insert("https_get".into(), t1.elapsed().as_millis() as u64);
+
+    let mut r = result_ok(
+        "probe",
+        "network",
+        &run_id,
+        start.elapsed().as_millis() as u64,
+    );
+    r.timing_ms.steps = steps;
+    r.data = Some(serde_json::json!({
+        "dns_addresses": addrs,
+        "http_status": status,
+        "target_url": host,
+        "proxy_env": collect_proxy_env(),
+    }));
+    r
+}
+
+fn probe_net_err(
+    run_id: &str,
+    start: Instant,
+    steps: HashMap<String, u64>,
+    code: ErrorCode,
+    message: String,
+) -> CommandResult {
+    let mut r = result_err(
+        "probe",
+        "network",
+        run_id,
+        start.elapsed().as_millis() as u64,
+        code,
+        message,
+    );
+    r.timing_ms.steps = steps;
+    r
 }
 
 fn collect_proxy_env() -> HashMap<String, String> {

@@ -106,25 +106,15 @@ async fn run_command(
     headers: HeaderMap,
     body: Bytes,
 ) -> Response {
-    // Only API-exposed commands are reachable over HTTP.
-    match st.registry.schema(&name) {
-        Some(s) if !s.expose.api => {
-            return problem(
-                StatusCode::NOT_FOUND,
-                ErrorCode::InvalidInput,
-                format!("unknown command: {name}"),
-                None,
-            );
-        }
-        None => {
-            return problem(
-                StatusCode::NOT_FOUND,
-                ErrorCode::InvalidInput,
-                format!("unknown command: {name}"),
-                None,
-            );
-        }
-        _ => {}
+    // Only API-exposed commands are reachable over HTTP; anything else — unknown
+    // or CLI-only — is a 404 with no distinction (don't leak the CLI surface).
+    if !matches!(st.registry.schema(&name), Some(s) if s.expose.api) {
+        return problem(
+            StatusCode::NOT_FOUND,
+            ErrorCode::InvalidInput,
+            format!("unknown command: {name}"),
+            None,
+        );
     }
 
     let args: Value = if body.is_empty() {
@@ -262,7 +252,7 @@ mod tests {
 
     fn test_app() -> Router {
         build_app(AppState {
-            caps: Arc::new(AppContext::default_headless()),
+            caps: Arc::new(AppContext::default()),
             registry: Arc::new(CommandRegistry::new()),
         })
     }

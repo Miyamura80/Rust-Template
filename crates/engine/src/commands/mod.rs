@@ -365,7 +365,7 @@ mod tests {
     use crate::context::{AppContext, Ctx};
 
     async fn run(name: &str, args: Value) -> CommandResult {
-        let ctx = AppContext::default_headless();
+        let ctx = AppContext::default();
         let cx = Ctx::new(&ctx);
         CommandRegistry::new().execute(name, args, &cx).await
     }
@@ -401,7 +401,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_read_write_file() {
-        let ctx = AppContext::default_headless();
+        let ctx = AppContext::default();
         let tmp = std::env::temp_dir().join("engine_test_rw.txt");
         let path_str = tmp.to_str().unwrap();
 
