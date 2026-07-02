@@ -30,23 +30,23 @@ help: ## Show this help message
 		}' $(MAKEFILE_LIST)
 
 ########################################################
-# Tauri / Frontend
+# App (server + CLI)
 ########################################################
 
-### Tauri
-.PHONY: dev build tauri-dev tauri-build
+### App
+.PHONY: run build build-release dev
 
-dev: ## Run the frontend in development mode
+run: ## Run the HTTP API server (appctl serve)
+	cargo run -p appctl -- serve
+
+build: ## Build the whole workspace (debug)
+	cargo build --workspace
+
+build-release: ## Build the whole workspace (release)
+	cargo build --workspace --release
+
+dev: ## Run the optional frontend in development mode
 	bun run dev
-
-build: ## Build the frontend
-	bun run build
-
-tauri-dev: ## Run the app in Tauri development mode
-	bun run tauri dev
-
-tauri-build: ## Build the Tauri application
-	bun run tauri build
 
 docs: ## Run docs with bun
 	@echo "$(GREEN)📚Running docs...$(RESET)"
@@ -59,7 +59,7 @@ docs: ## Run docs with bun
 ########################################################
 
 ### Initialization
-.PHONY: setup init banner logo
+.PHONY: setup init new banner logo
 
 setup: ## Set up dev environment from scratch (installs deps, copies .env, checks tooling)
 	@echo "$(BLUE)🔧 Setting up dev environment...$(RESET)"
@@ -79,34 +79,34 @@ setup: ## Set up dev environment from scratch (installs deps, copies .env, check
 	else \
 		echo "$(GREEN)✅ .env already exists$(RESET)"; \
 	fi
-	@echo "$(GREEN)✅ Setup complete. Run 'make tauri-dev' to start.$(RESET)"
+	@echo "$(GREEN)✅ Setup complete. Run 'make run' to start the server.$(RESET)"
 
-init: ## Initialize project (usage: make init name=my-project description="my description")
-	@if [ -z "$(name)" ] || [ -z "$(description)" ]; then \
-		echo "$(RED)Error: Both 'name' and 'description' parameters are required$(RESET)"; \
-		echo "Usage: make init name=<project_name> description=<project_description>"; \
+init: ## Onboard the template into a real project (appctl init). Bare = wizard; PROFILE=/CONFIG=/DRY_RUN=1/ARGS= for headless.
+	@cargo run -q -p appctl -- init \
+		$(if $(PROFILE),--profile $(PROFILE),) \
+		$(if $(CONFIG),--config $(CONFIG),) \
+		$(if $(DRY_RUN),--dry-run,) \
+		$(ARGS)
+
+new: ## Scaffold a new engine command (usage: make new name=fetch_url [description="..."])
+	@if [ -z "$(name)" ]; then \
+		echo "$(RED)Error: 'name' is required$(RESET)"; \
+		echo "Usage: make new name=<command_name> [description=\"...\"]"; \
 		exit 1; \
 	fi
-	@echo "$(YELLOW)🚀 Initializing project $(name)...$(RESET)"
-	@sed -i.bak "s/\"name\": \"tauri-app\"/\"name\": \"$(name)\"/" package.json && rm package.json.bak
-	@sed -i.bak "s/\"productName\": \"tauri-app\"/\"productName\": \"$(name)\"/" src-tauri/tauri.conf.json && rm src-tauri/tauri.conf.json.bak
-	@sed -i.bak "s/\"identifier\": \"com.eito.tauri-app\"/\"identifier\": \"com.$(USER).$(name)\"/" src-tauri/tauri.conf.json && rm src-tauri/tauri.conf.json.bak
-	@sed -i.bak "s/name = \"tauri-app\"/name = \"$(name)\"/" src-tauri/Cargo.toml && rm src-tauri/Cargo.toml.bak
-	@sed -i.bak "s/# Tauri-Template/# $(name)/" README.md && rm README.md.bak
-	@sed -i.bak "s/<b>agent ready tauri template<\/b>/<b>$(description)<\/b>/" README.md && rm README.md.bak
-	@echo "$(GREEN)✅ Updated project name, identifier, and description.$(RESET)"
+	@cargo run -q -p appctl -- new $(name) $(if $(description),--description "$(description)",)
 
 ### Asset Generation
 .PHONY: banner logo
 
 banner: ## Generate project banner image (requires APP__GEMINI_API_KEY)
 	@echo "$(YELLOW)🔍Generating banner...$(RESET)"
-	@cd src-tauri && cargo run --bin asset-gen -- banner
+	@cargo run -p assetgen --bin asset-gen -- banner
 	@echo "$(GREEN)✅Banner generated at media/banner.png$(RESET)"
 
 logo: ## Generate logo, icons, and favicon (requires APP__GEMINI_API_KEY)
 	@echo "$(YELLOW)🔍Generating logo and favicon...$(RESET)"
-	@cd src-tauri && cargo run --bin asset-gen -- logo
+	@cargo run -p assetgen --bin asset-gen -- logo
 	@echo "$(GREEN)✅Logo assets saved to docs/public/$(RESET)"
 
 
@@ -118,12 +118,12 @@ logo: ## Generate logo, icons, and favicon (requires APP__GEMINI_API_KEY)
 ### Testing
 test: ## Run Rust tests
 	@echo "$(GREEN)🧪Running Rust Tests...$(RESET)"
-	cd src-tauri && cargo test
+	cargo test --workspace
 	@echo "$(GREEN)✅Rust Tests Passed.$(RESET)"
 
 test_fast: ## Run fast tests (Rust)
 	@echo "$(GREEN)🧪Running Fast Rust Tests...$(RESET)"
-	cd src-tauri && cargo test
+	cargo test --workspace
 	@echo "$(GREEN)✅Fast Rust Tests Passed.$(RESET)"
 
 test_slow: ## Run slow tests (Rust placeholder)
@@ -134,9 +134,9 @@ test_nondeterministic: ## Run nondeterministic tests (Rust placeholder)
 
 test_flaky: ## Repeat fast tests to detect flaky tests
 	@echo "$(GREEN)🧪Running Flaky Test Detection (3 runs)...$(RESET)"
-	@cd src-tauri && for i in 1 2 3; do \
+	@for i in 1 2 3; do \
 		echo "Run $$i..."; \
-		cargo test || exit 1; \
+		cargo test --workspace || exit 1; \
 	done
 	@echo "$(GREEN)✅Flaky Test Detection Passed.$(RESET)"
 
@@ -152,14 +152,14 @@ fmt: ## Format code with Biome and rustfmt
 	@echo "$(YELLOW)✨ Formatting and linting with Biome...$(RESET)"
 	bunx @biomejs/biome check --write --unsafe .
 	@echo "$(YELLOW)✨ Formatting Rust code...$(RESET)"
-	cd src-tauri && cargo fmt
+	cargo fmt --all
 	@echo "$(GREEN)✅ Formatting completed.$(RESET)"
 
 lint: ## Lint code with Biome and Clippy
 	@echo "$(YELLOW)🔍 Checking with Biome...$(RESET)"
 	bunx @biomejs/biome check .
 	@echo "$(YELLOW)🔍 Linting Rust code with Clippy...$(RESET)"
-	cd src-tauri && cargo clippy -- -D warnings
+	cargo clippy --workspace --all-targets -- -D warnings
 	@echo "$(GREEN)✅ Linting completed.$(RESET)"
 
 knip: ## Find unused files, dependencies, and exports
@@ -173,7 +173,7 @@ audit: ## Audit dependencies for vulnerabilities
 	bun audit
 	@echo "$(YELLOW)🔍 Auditing Rust dependencies...$(RESET)"
 	@if command -v cargo-deny > /dev/null 2>&1; then \
-		cd src-tauri && cargo deny check; \
+		cargo deny check; \
 	else \
 		echo "$(YELLOW)⚠️ cargo-deny not installed. Skipping Rust audit.$(RESET)"; \
 	fi
@@ -210,13 +210,14 @@ bump-version: ## Bump version across all manifests (usage: make bump-version VER
 		echo "Usage: make bump-version VERSION=x.y.z"; \
 		exit 1; \
 	fi
-	@jq --arg v "$(VERSION)" '.version = $$v' src-tauri/tauri.conf.json > /tmp/_tauri.conf.json && mv /tmp/_tauri.conf.json src-tauri/tauri.conf.json
-	@perl -i.bak -0pe 's/^version = "[^"]*"/version = "$(VERSION)"/m' src-tauri/Cargo.toml && rm src-tauri/Cargo.toml.bak
+	@for f in crates/cli/Cargo.toml crates/engine/Cargo.toml crates/config/Cargo.toml crates/assetgen/Cargo.toml; do \
+		perl -i.bak -0pe 's/^version = "[^"]*"/version = "$(VERSION)"/m' $$f && rm $$f.bak; \
+	done
 	@jq --arg v "$(VERSION)" '.version = $$v' package.json > /tmp/_package.json && mv /tmp/_package.json package.json
 	@cargo update --workspace
-	@echo "$(GREEN)✅ Version bumped to $(VERSION) in tauri.conf.json, Cargo.toml, and package.json$(RESET)"
-	@echo "$(YELLOW)Next steps:$(RESET)"
-	@echo "  git add src-tauri/tauri.conf.json src-tauri/Cargo.toml package.json Cargo.lock"
+	@echo "$(GREEN)✅ Version bumped to $(VERSION) across all crate manifests and package.json$(RESET)"
+	@echo "$(YELLOW)Next steps (cargo-dist cuts the release from the tag):$(RESET)"
+	@echo "  git add crates/*/Cargo.toml package.json Cargo.lock"
 	@echo "  git commit -m '⚙️ bump version to $(VERSION)'"
 	@echo "  git tag v$(VERSION)"
 	@echo "  git push origin main --tags"

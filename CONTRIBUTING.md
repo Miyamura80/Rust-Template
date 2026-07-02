@@ -4,12 +4,13 @@
 
 1.  **Prerequisites**:
     *   Rust >= 1.75
-    *   Bun >= 1.0
-    *   System dependencies for Tauri (see [Tauri docs](https://tauri.app/v2/guides/getting-started/prerequisites))
+    *   Bun >= 1.0 (needed for `make ci` tooling — Biome, Knip, audit,
+        file_len_check — as well as the optional frontend / docs site)
 
 2.  **Setup**:
     ```bash
-    bun install
+    cargo build --workspace   # backend (engine + appctl)
+    bun install               # optional: frontend / docs
     ```
 
 3.  **Run Tests**:

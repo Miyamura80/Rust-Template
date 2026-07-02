@@ -2,13 +2,15 @@
 name = "engine"
 version = "0.1.0"
 edition = "2021"
-description = "Headless engine for the Tauri template app – shared between GUI and CLI"
+description = "Transport-agnostic service core for the Rust server template – shared across CLI, HTTP API, and MCP"
 license = "MIT"
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 serde_yaml = "0.9"
+schemars = "0.8"
+inventory = "0.3"
 tracing = "0.1"
 uuid = { version = "1", features = ["v4"] }
 reqwest = { version = "0.13", default-features = false, features = ["json", "rustls-no-provider", "http2", "charset", "system-proxy"] }

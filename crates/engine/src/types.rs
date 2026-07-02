@@ -105,7 +105,9 @@ pub struct DoctorReport {
     pub headless: bool,
     pub session_type: Option<String>,
     pub display_server: Option<String>,
-    pub proxy_env: HashMap<String, String>,
+    /// Names (never values) of the proxy-related env vars that are set — the
+    /// report is served over the HTTP API and values can carry credentials.
+    pub proxy_env_set: Vec<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -165,27 +167,6 @@ pub struct ScenarioResult {
     pub name: Option<String>,
     pub overall_status: Status,
     pub step_results: Vec<CommandResult>,
-}
-
-// ---------------------------------------------------------------------------
-// Serve / daemon protocol
-// ---------------------------------------------------------------------------
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DaemonRequest {
-    pub id: String,
-    pub method: String,
-    #[serde(default)]
-    pub params: serde_json::Value,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DaemonResponse {
-    pub id: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub result: Option<CommandResult>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub error: Option<ErrorInfo>,
 }
 
 // ---------------------------------------------------------------------------

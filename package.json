@@ -1,5 +1,5 @@
 {
-	"name": "tauri-app",
+	"name": "rust-template",
 	"private": true,
 	"version": "0.1.0",
 	"type": "module",
@@ -7,18 +7,13 @@
 		"docs"
 	],
 	"scripts": {
-		"dev": "vite",
-		"build": "tsc && vite build",
-		"preview": "vite preview",
-		"tauri": "tauri",
+		"dev": "vite frontend",
+		"build": "tsc && vite build frontend",
+		"preview": "vite preview frontend",
 		"check": "biome check .",
 		"knip": "knip"
 	},
 	"dependencies": {
-		"@tauri-apps/api": "^2.10.1",
-		"@tauri-apps/plugin-opener": "^2.5.3",
-		"@tauri-apps/plugin-process": "^2.3.1",
-		"@tauri-apps/plugin-updater": "^2.10.0",
 		"react": "^19.2.4",
 		"react-dom": "^19.2.4"
 	},
@@ -30,14 +25,12 @@
 	"fileLength": {
 		"max_lines": 500,
 		"exclude": [
-			"src-tauri/src/bin/asset_gen.rs",
-			"crates/engine/src/scenario.rs",
-			"src-tauri/src/logging.rs"
+			"crates/assetgen/src/main.rs",
+			"crates/engine/src/scenario.rs"
 		]
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^2.4.5",
-		"@tauri-apps/cli": "^2.10.0",
 		"@types/react": "^19.2.14",
 		"@types/react-dom": "^19.2.3",
 		"@vitejs/plugin-react": "^5.1.4",

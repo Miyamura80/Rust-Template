@@ -2,51 +2,51 @@ This file provides guidance to AI agents working with code in this repository.
 
 ## Project Overview
 
-Tauri template for desktop application development with React and TypeScript.
-**Note:** This project has migrated away from Python. Use Rust for backend logic and Node/Bun for frontend/scripts.
+A Rust application-server template. Business logic is written **once** as a typed
+async `Command` in the `engine` crate and exposed over multiple transports — CLI,
+HTTP API, and (later) MCP — through the `appctl` binary. The `engine` core has no
+transport dependency; transports live in `crates/cli` behind cargo features. An
+optional React/Vite frontend (`frontend/`) talks to the HTTP API over `fetch`.
+**Note:** migrated away from Tauri/desktop and from Python — Rust for backend,
+Node/Bun for frontend/scripts.
 **Before any other work in this repo, enable prek:** `bun add -g prek && prek install`. Hooks are defined in `prek.toml`.
 
 ## Common Commands
 
 ```bash
-# Frontend / Tauri
-bun install             # Install dependencies
-bun run tauri dev       # Run the app in development mode
-bun run build           # Build the frontend
-bun run tauri build     # Build the Tauri application
-bun run check           # Run formatting and linting (Biome)
-
-# Rust / Backend
-cargo test              # Run Rust tests
-cargo check             # Check Rust code
-cargo clippy            # Run Rust linter
+make run                # Run the HTTP API server (= appctl serve)
+cargo test --workspace  # Run Rust tests
+cargo clippy --workspace --all-targets -- -D warnings
+appctl call ping --json # Invoke a command headlessly
+make new name=fetch_url # Scaffold a new engine command
+make init PROFILE=... DRY_RUN=1  # Onboard the template into a real project
+make dev                # Optional frontend: Vite dev server, /api → appctl serve
 ```
 
 ## Architecture
 
-- **src/** - Tauri frontend (React + TypeScript + Vite)
-- **src-tauri/** - Tauri host (Rust) — wraps engine commands as Tauri handlers
-- **crates/engine/** - Platform-agnostic backend logic (no Tauri dependency)
-- **crates/cli/** - Headless CLI (`appctl`) for testing engine logic
-- **docs/** - Documentation (Next.js app)
+- **crates/engine/** — typed async `Command` registry with `inventory`
+  self-registration; per-request `Ctx`; capability traits. No transport deps.
+- **crates/cli/** — the `appctl` binary; `cli` and `http-api` are cargo features
+  (both default), so `appctl init` can prune a surface and still compile.
+- **crates/config/** — crate `app-config`; `AppConfig` (secrets) vs sanitized
+  `FrontendConfig` (served over HTTP). The sanitizer is a security boundary.
+- **frontend/** — optional React/Vite app, `fetch`-based `/api/v1` client.
 
 > **Making backend changes?** Use the `update-backend` skill for architecture details, command patterns, trait implementations, config access, and `appctl` testing workflows.
 
 ## Code Style
 
-### TypeScript (Frontend)
-- `camelCase` for functions/variables
-- `PascalCase` for components/classes
-- Use Biome for formatting/linting
+Enforced by Biome (TS) and `cargo fmt` + Clippy (Rust). See `biome.json`.
 
 ## Configuration Pattern
 
-Configuration is handled in Rust and exposed to the frontend.
-Source of truth: `src-tauri/global_config.yaml` (and `.env` overrides).
+Configuration is handled in Rust and exposed to the frontend via the sanitized
+`FrontendConfig`. Source of truth: `crates/config/global_config.yaml` (`.env` /
+`APP__`-prefixed env overrides; `APP_CONFIG_PATH` for a deployed binary).
 
 ```rust
-// Accessing config in Rust
-let config = crate::global_config::get_config();
+let config = app_config::get_config();
 println!("Model: {}", config.default_llm.default_model);
 ```
 

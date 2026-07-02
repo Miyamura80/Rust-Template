@@ -2,33 +2,12 @@
 
 [advisories]
 ignore = [
-    # UNMAINTAINED TRANSITIVES - Tauri v2 Dependencies (Linux/GTK3 stack)
-    # These are foundational to the current Tauri/Wry/Tao ecosystem on Linux.
-    # They can only be addressed by upstream framework migrations (e.g., to GTK4).
-    "RUSTSEC-2024-0411", # atk is unmaintained
-    "RUSTSEC-2024-0412", # pango is unmaintained
-    "RUSTSEC-2024-0413", # gtk is unmaintained
-    "RUSTSEC-2024-0414", # gdk-pixbuf is unmaintained
-    "RUSTSEC-2024-0415", # gio is unmaintained
-    "RUSTSEC-2024-0416", # gdk is unmaintained
-    "RUSTSEC-2024-0417", # soup3 is unmaintained
-    "RUSTSEC-2024-0418", # webkit2gtk is unmaintained
-    "RUSTSEC-2024-0419", # gdkx11 is unmaintained
-    "RUSTSEC-2024-0420", # javascriptcore-rs is unmaintained
-    "RUSTSEC-2024-0370", # proc-macro-error is unmaintained (used by GTK/Glib bindings)
-
-    # UNMAINTAINED TRANSITIVES - String/URL Utilities
-    # Pulled in by urlpattern, which is used for Tauri routing.
-    "RUSTSEC-2025-0100", # unic-ucd-ident is unmaintained
-    "RUSTSEC-2025-0098", # unic-ucd-version is unmaintained
-    "RUSTSEC-2025-0080", # unic-common is unmaintained
-    "RUSTSEC-2025-0075", # unic-char-range is unmaintained
-    "RUSTSEC-2025-0081", # unic-* crates are unmaintained
-
-# UNMAINTAINED TRANSITIVES - CSS/Selectors
-# Pulled in by kuchikiki -> selectors -> fxhash.
-    "RUSTSEC-2025-0057", # fxhash is unmaintained
-    "RUSTSEC-2024-0436", # paste is unmaintained and only used by rav1e -> ravif -> image
+    # UNMAINTAINED TRANSITIVE - image encoding stack.
+    # The asset-gen crate pulls in `image` -> `ravif` -> `rav1e`, which drags in
+    # both of these. Neither has a safe upgrade upstream yet; they are build-time
+    # image tooling, not on the server/CLI request path.
+    "RUSTSEC-2024-0436", # paste is unmaintained (rav1e -> ravif -> image, via asset-gen)
+    "RUSTSEC-2026-0105", # core2 unmaintained + yanked, no safe upgrade (rav1e -> bitstream-io -> core2)
 ]
 
 [licenses]
@@ -51,11 +30,11 @@ allow = [
 [bans]
 multiple-versions = "warn"
 
-# These crates currently appear multiple times because they're pulled in via
-# different branches of the Tauri/Wry dependency graph (GTK vs. http clients).
-# The duplicates are tracked upstream and cannot be consolidated until the
-# relevant crates release compatible versions, so skip them here to keep
-# `cargo deny check` clean while the warnings remain known.
+# These crates appear at multiple versions across the dependency graph (e.g.
+# proc-macro and Windows binding crates pulled in at different pins by different
+# dependents). The duplicates are tracked upstream and cannot be consolidated
+# until the relevant crates release compatible versions, so skip them here to
+# keep `cargo deny check` quiet while the warnings remain known.
 skip = [
     "base64",
     "bitflags",

@@ -1,26 +1,25 @@
 ---
 name: update-backend
-description: Guide for making changes to the Rust backend of the Tauri template, covering the engine crate, CLI harness, Tauri commands, and testing patterns.
+description: Guide for making changes to the Rust backend of the server template, covering the engine crate, the CLI + HTTP API transports, and testing patterns.
 ---
 
 # Update Backend Skill
 
-Use this skill whenever you are modifying Rust backend logic — adding commands, probes, traits, or configuration in `crates/engine`, `crates/cli`, or `src-tauri`.
+Use this skill whenever you are modifying Rust backend logic — adding commands, probes, traits, or configuration in `crates/engine` or `crates/cli`.
 
 ## Architecture
 
-The backend is split into three layers:
+The backend is split into two layers:
 
 | Layer | Path | Role |
 |-------|------|------|
-| **engine** | `crates/engine/` | All real backend logic. No Tauri dependency — runs in CLI, tests, and WASM. |
-| **appctl CLI** | `crates/cli/` | Headless test harness that drives `engine` for VM/CI compatibility testing. |
-| **src-tauri** | `src-tauri/` | Tauri host: wraps `engine` commands as Tauri `#[tauri::command]` handlers. |
+| **engine** | `crates/engine/` | All real backend logic. No transport dependency — runs in the CLI, the HTTP API, and tests. |
+| **appctl** | `crates/cli/` | The `appctl` binary. Drives `engine` over the CLI (`call`/`probe`/`doctor`/`run-scenario`) and the axum HTTP API (`serve`), gated behind the `cli` / `http-api` cargo features. |
 
 ### Design Principles (engine)
 
-- **No Tauri dependency** — never import Tauri types inside `crates/engine`.
-- **Trait-based OS access** — filesystem, network, and clipboard go through `FilesystemOps`, `NetworkOps`, `ClipboardOps`. Inject real platform or headless stubs via `AppContext`.
+- **No transport dependency** — never import CLI, axum, or HTTP types inside `crates/engine`.
+- **Trait-based OS access** — filesystem and network go through `FilesystemOps`, `NetworkOps`. Inject real platform or headless stubs via `AppContext`.
 - **Structured results** — every operation returns `CommandResult` with `run_id`, `status`, `error`, `timing_ms`, and `env_summary`.
 - **No panics on missing capabilities** — headless environments get `SKIP` or `UNSUPPORTED` error codes.
 
@@ -32,30 +31,65 @@ The backend is split into three layers:
 
 ## Adding a Backend Command
 
-1. Implement the handler in `crates/engine/src/commands/`:
+Commands implement the typed, async `Command` trait (one input struct drives the
+CLI args, the HTTP body schema, and the future MCP tool schema) and
+**self-register at link time** via `register_command!` — there is no
+hand-maintained registration list.
+
+The fastest path is the scaffolder: `appctl new <name>` (or `make new
+name=<name>`) generates the file below from `templates/command.rs.tpl` and
+inserts the `mod <name>;` line for you. To do it by hand:
+
+1. Drop a new file `crates/engine/src/commands/my_command.rs`:
 
 ```rust
-fn cmd_my_command(args: Value, ctx: &AppContext) -> Result<Value, CommandError> {
-    let input = args.get("key").and_then(|v| v.as_str())
-        .ok_or_else(|| CommandError::InvalidInput("missing 'key'".into()))?;
-    Ok(serde_json::json!({ "result": input }))
+use crate::commands::{Command, CommandError};
+use crate::context::Ctx;
+use crate::register_command;
+use async_trait::async_trait;
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
+
+#[derive(Default)]
+pub struct MyCommand;
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct MyCommandInput {
+    pub key: String,
 }
-```
 
-2. Register it in `CommandRegistry::new()`:
-
-```rust
-reg.register("my_command", cmd_my_command);
-```
-
-3. Expose it in `src-tauri` as a Tauri command (if the GUI needs it):
-
-```rust
-#[tauri::command]
-fn my_command(args: serde_json::Value, ctx: tauri::State<AppContext>) -> CommandResult {
-    ctx.registry.execute("my_command", args, &ctx)
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct MyCommandOutput {
+    pub result: String,
 }
+
+#[async_trait]
+impl Command for MyCommand {
+    type Input = MyCommandInput;
+    type Output = MyCommandOutput;
+
+    fn name(&self) -> &'static str { "my_command" }
+    fn description(&self) -> &'static str { "One-line description." }
+    // Optional: restrict transports, e.g. `Expose::cli_only()` / `Expose::no_mcp()`.
+
+    async fn run(&self, input: MyCommandInput, cx: &Ctx<'_>)
+        -> Result<MyCommandOutput, CommandError>
+    {
+        // `cx.fs()`, `cx.network()` reach the capabilities;
+        // `cx.request_id` / `cx.deadline` are request-scoped.
+        Ok(MyCommandOutput { result: input.key })
+    }
+}
+
+register_command!(MyCommand);
 ```
+
+2. Declare the module in `crates/engine/src/commands/mod.rs` (`mod my_command;`).
+   The `register_command!` line does the rest — `CommandRegistry::new()` collects
+   it automatically. (`appctl new` inserts this line for you.)
+
+3. No transport change is needed: the HTTP `POST /api/v1/commands/:name` route is
+   auto-derived from the registry, and the CLI `call` path dispatches by name.
 
 4. Smoke-test headlessly with `appctl`:
 
@@ -64,42 +98,52 @@ cargo build -p appctl
 appctl call my_command --args '{"key": "value"}' --json
 ```
 
+- Deserialize failures map to `INVALID_INPUT` automatically. Return typed
+  `CommandError` variants (`Unsupported`, `NetworkError`, `Timeout`, …) for
+  everything else; `CapError` from a capability converts via `?`.
+- API/MCP receive the **bare `Output`**; the CLI/scenario runner wrap it in the
+  `CommandResult` envelope. Introspect schemas via `registry.schema(name)`.
+
 ## Adding an OS Capability (Trait)
 
 Implement the relevant trait from `crates/engine/src/traits.rs`:
 
 ```rust
-use engine::traits::{ClipboardOps, CapResult, CapError};
+use engine::traits::{NetworkOps, CapResult, CapError};
 
-struct MyClipboard;
+struct OfflineNetwork;
 
-impl ClipboardOps for MyClipboard {
-    fn read_text(&self) -> CapResult<String> {
-        Err(CapError::Unsupported("not available".into()))
+#[async_trait::async_trait]
+impl NetworkOps for OfflineNetwork {
+    async fn dns_resolve(&self, _host: &str) -> CapResult<Vec<String>> {
+        Err(CapError::Unsupported("offline".into()))
     }
-    fn write_text(&self, _text: &str) -> CapResult<()> {
-        Err(CapError::Unsupported("not available".into()))
+    async fn https_get(&self, _url: &str, _timeout_ms: u64) -> CapResult<(u16, String)> {
+        Err(CapError::Unsupported("offline".into()))
     }
 }
 ```
 
-Inject via `AppContext` — real platform in `src-tauri`, headless stubs in tests and `appctl`.
+Inject via `AppContext` — `AppContext::default()` wires the real platform capabilities (used by `appctl`); pass stub implementations to `AppContext::new(fs, network)` to run a command against fakes in tests.
 
 ## Configuration
 
-Source of truth: `src-tauri/global_config.yaml` (`.env` overrides).
-Access in Rust:
+Config lives in its own crate, `crates/config` (crate name `app-config`).
+Source of truth: `crates/config/global_config.yaml` (layered with
+`production_config.yaml` / `.global_config.yaml` and `APP__`-prefixed env
+overrides; `APP_CONFIG_PATH` points a deployed binary at its config file).
 
 ```rust
-let config = crate::global_config::get_config();
+let config = app_config::get_config();
 println!("Model: {}", config.default_llm.default_model);
 ```
 
-Config is loaded in `src-tauri/src/global_config.rs` and **not** imported by `crates/engine` (keep engine config-agnostic unless needed).
+`crates/engine` stays config-agnostic — do not import `app-config` there unless a
+command genuinely needs config; prefer passing values in via the input struct.
 
 ## Testing with appctl
 
-The `appctl` CLI drives `engine` without a running Tauri process:
+The `appctl` CLI drives `engine` without a running HTTP server:
 
 ```bash
 # Build
@@ -157,4 +201,4 @@ Error codes: `INVALID_INPUT`, `UNSUPPORTED`, `UNIMPLEMENTED`, `DEPENDENCY_MISSIN
 - [ ] `cargo clippy` passes (no warnings)
 - [ ] `cargo test` passes
 - [ ] New command smoke-tested with `appctl call <cmd> --json`
-- [ ] `engine` crate has no Tauri imports
+- [ ] `engine` crate has no transport imports (no CLI/axum/HTTP types)

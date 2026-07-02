@@ -1,24 +1,36 @@
-//! `appctl` – headless CLI test harness for the Tauri template engine.
+//! `appctl` – the Rust server template's unified CLI + HTTP API binary.
 //!
-//! Runs the same engine logic that powers the GUI, but without a window
-//! server. Designed for VM-based compatibility testing on macOS + Linux.
+//! Runs the shared `engine` command registry over multiple transports:
+//! `serve` (axum HTTP API) plus the CLI diagnostics (`call`, `probe`, `doctor`,
+//! `run-scenario`). `init` onboards the template into a real project, `new`
+//! scaffolds a fresh engine command, and `mcp` is a stub for the future MCP
+//! transport. Transports are cargo features (`cli`, `http-api`) so `appctl
+//! init` can prune a surface and still leave a compiling project.
 
-mod serve;
+mod init;
+mod mcp;
+mod scaffold;
+#[cfg(feature = "http-api")]
+mod serve_http;
 
 use clap::{Parser, Subcommand};
+
+#[cfg(feature = "cli")]
 use engine::types::*;
-use engine::{AppContext, CommandRegistry, CommandResult};
+#[cfg(any(feature = "cli", feature = "http-api"))]
+use engine::{AppContext, CommandRegistry};
+#[cfg(feature = "cli")]
+use engine::{CommandResult, Ctx};
+#[cfg(feature = "cli")]
 use std::path::PathBuf;
 
-// ===========================================================================
 // CLI definition
-// ===========================================================================
 
 #[derive(Parser)]
 #[command(
     name = "appctl",
     version,
-    about = "CLI test harness for the Tauri template app"
+    about = "CLI + HTTP API harness for the Rust server template"
 )]
 struct Cli {
     #[command(subcommand)]
@@ -27,7 +39,17 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
+    /// Onboard this template into a real project (rename, prune, .env).
+    Init(init::InitArgs),
+
+    /// Scaffold a new engine command from the template.
+    New(scaffold::NewArgs),
+
+    /// (stub) Serve the registry over MCP — designed-for, not yet implemented.
+    Mcp,
+
     /// Collect environment facts and emit an env summary.
+    #[cfg(feature = "cli")]
     Doctor {
         /// Output as JSON instead of human-readable text.
         #[arg(long)]
@@ -38,6 +60,7 @@ enum Commands {
     },
 
     /// Invoke a backend command by name with JSON args.
+    #[cfg(feature = "cli")]
     Call {
         /// Command name (e.g. "ping", "read_file", "write_file").
         cmd: String,
@@ -55,9 +78,10 @@ enum Commands {
         artifacts: Option<PathBuf>,
     },
 
-    /// Targeted capability check: filesystem, network, or clipboard.
+    /// Targeted capability check: filesystem or network.
+    #[cfg(feature = "cli")]
     Probe {
-        /// Probe target: filesystem | network | clipboard
+        /// Probe target: filesystem | network
         target: String,
         /// Output as JSON.
         #[arg(long)]
@@ -68,6 +92,7 @@ enum Commands {
     },
 
     /// Run a scripted scenario from a YAML file.
+    #[cfg(feature = "cli")]
     RunScenario {
         /// Path to the scenario YAML file.
         file: PathBuf,
@@ -82,78 +107,97 @@ enum Commands {
         interactive: bool,
     },
 
-    /// Start daemon mode over a Unix socket.
+    /// Start the HTTP API server (axum). Host/port default from config.
+    #[cfg(feature = "http-api")]
     Serve {
-        /// Path for the Unix domain socket.
+        /// Bind host (overrides config `server.host`).
         #[arg(long)]
-        socket: PathBuf,
-    },
-
-    /// Emit a desktop event (skeleton – returns UNIMPLEMENTED).
-    Emit {
-        /// Event type: tray-click | deep-link | file-drop | app-focus
-        event: String,
-        /// Optional event payload as JSON.
-        #[arg(long, default_value = "{}")]
-        payload: String,
-        /// Output as JSON.
+        host: Option<String>,
+        /// Bind port (overrides config `server.port`).
         #[arg(long)]
-        json: bool,
+        port: Option<u16>,
     },
 }
 
-// ===========================================================================
 // Main
-// ===========================================================================
 
 #[tokio::main]
 async fn main() {
     // Install ring as the rustls crypto provider (reqwest needs this with rustls-no-provider)
     let _ = rustls::crypto::ring::default_provider().install_default();
 
-    // Initialise tracing for CLI (structured, no tauri config dependency)
+    // Initialise tracing for CLI (structured, no config dependency)
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .with_writer(std::io::stderr)
         .init();
 
     let cli = Cli::parse();
-    let ctx = AppContext::default_platform();
-    let registry = CommandRegistry::new();
 
     match cli.command {
+        Commands::Init(args) => {
+            if let Err(e) = init::run(args) {
+                eprintln!("error: {e:#}");
+                std::process::exit(1);
+            }
+        }
+        Commands::New(args) => {
+            if let Err(e) = scaffold::run(args) {
+                eprintln!("error: {e:#}");
+                std::process::exit(1);
+            }
+        }
+        Commands::Mcp => mcp::run(),
+        #[cfg(feature = "cli")]
         Commands::Doctor { json, out } => cmd_doctor(json, out).await,
+        #[cfg(feature = "cli")]
         Commands::Call {
             cmd,
             args,
             json,
             timeout: _,
             artifacts,
-        } => cmd_call(&cmd, &args, json, artifacts, &ctx, &registry).await,
+        } => {
+            let ctx = AppContext::default();
+            let registry = CommandRegistry::new();
+            cmd_call(&cmd, &args, json, artifacts, &ctx, &registry).await
+        }
+        #[cfg(feature = "cli")]
         Commands::Probe {
             target,
             json,
             artifacts,
-        } => cmd_probe(&target, json, artifacts, &ctx).await,
+        } => {
+            let ctx = AppContext::default();
+            cmd_probe(&target, json, artifacts, &ctx).await
+        }
+        #[cfg(feature = "cli")]
         Commands::RunScenario {
             file,
             artifacts,
             json,
             interactive,
-        } => cmd_run_scenario(&file, json, interactive, artifacts, &ctx, &registry).await,
-        Commands::Serve { socket } => serve::run_daemon(socket, ctx, registry).await,
-        Commands::Emit {
-            event,
-            payload: _,
-            json,
-        } => cmd_emit(&event, json).await,
+        } => {
+            let ctx = AppContext::default();
+            let registry = CommandRegistry::new();
+            cmd_run_scenario(&file, json, interactive, artifacts, &ctx, &registry).await
+        }
+        #[cfg(feature = "http-api")]
+        Commands::Serve { host, port } => {
+            let ctx = AppContext::default();
+            let registry = CommandRegistry::new();
+            let cfg = &app_config::get_config().server;
+            let host = host.unwrap_or_else(|| cfg.host.clone());
+            let port = port.unwrap_or(cfg.port);
+            let settings = serve_http::ServeSettings::from_config(cfg);
+            serve_http::run_server(host, port, ctx, registry, settings).await
+        }
     }
 }
 
-// ===========================================================================
-// Subcommand implementations
-// ===========================================================================
+// Subcommand implementations (CLI diagnostics)
 
+#[cfg(feature = "cli")]
 async fn cmd_doctor(json: bool, out: Option<PathBuf>) {
     let result = engine::doctor::run_doctor();
     if let Some(ref path) = out {
@@ -162,6 +206,7 @@ async fn cmd_doctor(json: bool, out: Option<PathBuf>) {
     output_result(&result, json);
 }
 
+#[cfg(feature = "cli")]
 async fn cmd_call(
     cmd: &str,
     args_str: &str,
@@ -186,13 +231,15 @@ async fn cmd_call(
         }
     };
 
-    let result = registry.execute(cmd, args, ctx);
+    let cx = Ctx::new(ctx);
+    let result = registry.execute(cmd, args, &cx).await;
     if let Some(ref dir) = artifacts {
         write_artifacts(dir, &result);
     }
     output_result(&result, json);
 }
 
+#[cfg(feature = "cli")]
 async fn cmd_probe(target: &str, json: bool, artifacts: Option<PathBuf>, ctx: &AppContext) {
     let result = engine::probes::run_probe(target, ctx).await;
     if let Some(ref dir) = artifacts {
@@ -201,6 +248,7 @@ async fn cmd_probe(target: &str, json: bool, artifacts: Option<PathBuf>, ctx: &A
     output_result(&result, json);
 }
 
+#[cfg(feature = "cli")]
 async fn cmd_run_scenario(
     file: &PathBuf,
     json: bool,
@@ -355,46 +403,9 @@ async fn cmd_run_scenario(
     }
 }
 
-async fn cmd_emit(event: &str, json: bool) {
-    let run_id = new_run_id();
-    let headless = detect_headless();
-
-    let (status, code, msg) = if headless {
-        (
-            Status::Skip,
-            ErrorCode::Unsupported,
-            format!("event '{}' unsupported in headless environment", event),
-        )
-    } else {
-        (
-            Status::Skip,
-            ErrorCode::Unimplemented,
-            format!("event '{}' is not yet implemented (skeleton)", event),
-        )
-    };
-
-    let result = CommandResult {
-        run_id,
-        command: "emit".to_string(),
-        target: event.to_string(),
-        status,
-        error: Some(ErrorInfo {
-            code,
-            message: msg,
-            details: serde_json::Value::Null,
-        }),
-        timing_ms: TimingInfo::default(),
-        artifacts: vec![],
-        env_summary: EnvSummary::default(),
-        data: None,
-    };
-    output_result(&result, json);
-}
-
-// ===========================================================================
 // Output helpers
-// ===========================================================================
 
+#[cfg(feature = "cli")]
 fn output_result(result: &CommandResult, json: bool) {
     if json {
         let j = serde_json::to_string_pretty(result).unwrap_or_default();
@@ -411,6 +422,7 @@ fn output_result(result: &CommandResult, json: bool) {
     }
 }
 
+#[cfg(feature = "cli")]
 fn print_human(r: &CommandResult) {
     let status_icon = match r.status {
         Status::Pass => "PASS",
@@ -449,10 +461,9 @@ fn print_human(r: &CommandResult) {
     );
 }
 
-// ===========================================================================
 // Artifact helpers
-// ===========================================================================
 
+#[cfg(feature = "cli")]
 fn write_result_file(path: &std::path::Path, result: &CommandResult) {
     let j = serde_json::to_string_pretty(result).unwrap_or_default();
     if let Err(e) = std::fs::write(path, &j) {
@@ -464,6 +475,7 @@ fn write_result_file(path: &std::path::Path, result: &CommandResult) {
     }
 }
 
+#[cfg(feature = "cli")]
 fn write_artifacts(dir: &std::path::Path, result: &CommandResult) {
     let art_dir = dir.join(&result.run_id);
     if let Err(e) = std::fs::create_dir_all(&art_dir) {

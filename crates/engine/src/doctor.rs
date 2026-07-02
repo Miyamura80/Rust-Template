@@ -1,7 +1,6 @@
 //! Doctor – gather environment facts for diagnostics.
 
 use crate::types::*;
-use std::collections::HashMap;
 use std::time::Instant;
 
 /// Run the doctor check and return a full report as a CommandResult.
@@ -28,7 +27,7 @@ fn gather_report() -> DoctorReport {
         headless: detect_headless(),
         session_type: session_type(),
         display_server: display_server(),
-        proxy_env: collect_proxy_env(),
+        proxy_env_set: crate::env::proxy_env_names(),
     }
 }
 
@@ -127,24 +126,6 @@ fn display_server() -> Option<String> {
     {
         None
     }
-}
-
-fn collect_proxy_env() -> HashMap<String, String> {
-    let keys = [
-        "HTTP_PROXY",
-        "http_proxy",
-        "HTTPS_PROXY",
-        "https_proxy",
-        "NO_PROXY",
-        "no_proxy",
-    ];
-    let mut out = HashMap::new();
-    for k in keys {
-        if let Ok(v) = std::env::var(k) {
-            out.insert(k.to_string(), v);
-        }
-    }
-    out
 }
 
 fn run_cmd(cmd: &str, args: &[&str]) -> Option<String> {
