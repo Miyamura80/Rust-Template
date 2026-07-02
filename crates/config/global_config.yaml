@@ -11,6 +11,11 @@ example_parent:
 server:
   host: "127.0.0.1"
   port: 8080
+  # HTTP request timeout in seconds (omit → 30s default).
+  request_timeout_secs: 30
+  # Allowed CORS origins. Empty = permissive (dev). In production, list the
+  # exact frontend origins, e.g. ["https://app.example.com"].
+  cors_allow_origins: []
 
 ########################################################
 # LLMs

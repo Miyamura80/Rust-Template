@@ -158,9 +158,10 @@ export function Chat() {
 							/>
 						</svg>
 					</button>
-					<span
+					<output
 						className={`chat-status-dot chat-status-dot--${connectivity}`}
 						title={connectivityLabel}
+						aria-label={connectivityLabel}
 					/>
 					<span className="chat-header-model">{modelLabel}</span>
 				</div>

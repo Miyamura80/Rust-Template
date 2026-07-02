@@ -68,4 +68,9 @@ make bump-version VERSION=1.3.0-beta.1
 git tag v1.3.0-beta.1 && git push origin v1.3.0-beta.1
 ```
 
+The release workflow matches pre-release tags via a dedicated
+`v[0-9]+.[0-9]+.[0-9]+-*` trigger (alongside the stable `vX.Y.Z` pattern), so a
+`-beta.N` tag builds artifacts. If you change the tag scheme, update both
+patterns in `.github/workflows/release.yml` or the push will silently no-op.
+
 After CI completes, edit the GitHub Release and check **This is a pre-release**.

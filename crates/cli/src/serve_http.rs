@@ -22,7 +22,11 @@ use axum::{
 use engine::types::ErrorCode;
 use engine::{AppContext, CommandError, CommandRegistry, Ctx};
 use serde_json::{json, Value};
-use tower_http::{cors::CorsLayer, timeout::TimeoutLayer, trace::TraceLayer};
+use tower_http::{
+    cors::{Any, CorsLayer},
+    timeout::TimeoutLayer,
+    trace::TraceLayer,
+};
 
 /// Shared application state: capabilities + registry, both cheap to clone.
 #[derive(Clone)]
@@ -31,8 +35,48 @@ pub struct AppState {
     pub registry: Arc<CommandRegistry>,
 }
 
-/// Build the router. Pure function of state → easy to unit-test via `oneshot`.
-pub fn build_app(state: AppState) -> Router {
+/// Operational tunables for the HTTP server, sourced from `global_config.yaml`
+/// (`server.*`). Kept out of [`AppState`] since middleware — not handlers —
+/// consumes them.
+pub struct ServeSettings {
+    pub request_timeout: Duration,
+    pub cors_allow_origins: Vec<String>,
+}
+
+impl Default for ServeSettings {
+    fn default() -> Self {
+        Self {
+            request_timeout: Duration::from_secs(30),
+            cors_allow_origins: Vec::new(),
+        }
+    }
+}
+
+impl ServeSettings {
+    /// Project the loaded `server` config block into serve-time settings.
+    pub fn from_config(cfg: &app_config::ServerConfig) -> Self {
+        Self {
+            request_timeout: Duration::from_secs(cfg.request_timeout_secs.unwrap_or(30)),
+            cors_allow_origins: cfg.cors_allow_origins.clone(),
+        }
+    }
+}
+
+/// Permissive CORS when no origins are configured (dev default); otherwise an
+/// explicit origin allowlist. Set `server.cors_allow_origins` to lock down.
+fn cors_layer(origins: &[String]) -> CorsLayer {
+    if origins.is_empty() {
+        return CorsLayer::permissive();
+    }
+    let allowed: Vec<HeaderValue> = origins.iter().filter_map(|o| o.parse().ok()).collect();
+    CorsLayer::new()
+        .allow_origin(allowed)
+        .allow_methods(Any)
+        .allow_headers(Any)
+}
+
+/// Build the router. Pure function of state + settings → easy to unit-test.
+pub fn build_app(state: AppState, settings: &ServeSettings) -> Router {
     let api = Router::new()
         .route("/commands", get(list_commands))
         .route("/commands/:name", post(run_command))
@@ -45,21 +89,27 @@ pub fn build_app(state: AppState) -> Router {
         .nest("/api/v1", api)
         // Middleware seam: auth / rate-limit slot in here later, never in engine.
         .layer(TraceLayer::new_for_http())
-        .layer(CorsLayer::permissive())
+        .layer(cors_layer(&settings.cors_allow_origins))
         .layer(TimeoutLayer::with_status_code(
             StatusCode::REQUEST_TIMEOUT,
-            Duration::from_secs(30),
+            settings.request_timeout,
         ))
         .with_state(state)
 }
 
 /// Bind and serve until SIGTERM/SIGINT, then shut down gracefully.
-pub async fn run_server(host: String, port: u16, caps: AppContext, registry: CommandRegistry) {
+pub async fn run_server(
+    host: String,
+    port: u16,
+    caps: AppContext,
+    registry: CommandRegistry,
+    settings: ServeSettings,
+) {
     let state = AppState {
         caps: Arc::new(caps),
         registry: Arc::new(registry),
     };
-    let app = build_app(state);
+    let app = build_app(state, &settings);
 
     let addr = format!("{host}:{port}");
     let listener = match tokio::net::TcpListener::bind(&addr).await {
@@ -251,10 +301,13 @@ mod tests {
     use tower::ServiceExt; // for `oneshot`
 
     fn test_app() -> Router {
-        build_app(AppState {
-            caps: Arc::new(AppContext::default()),
-            registry: Arc::new(CommandRegistry::new()),
-        })
+        build_app(
+            AppState {
+                caps: Arc::new(AppContext::default()),
+                registry: Arc::new(CommandRegistry::new()),
+            },
+            &ServeSettings::default(),
+        )
     }
 
     async fn body_json(resp: Response) -> Value {
@@ -338,27 +391,31 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn missing_required_field_maps_to_400() {
-        let resp = test_app()
-            .oneshot(post("/api/v1/commands/read_file", "{}"))
-            .await
-            .unwrap();
-        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
-        let body = body_json(resp).await;
-        assert_eq!(body["error"]["code"], "INVALID_INPUT");
+    async fn cli_only_command_is_not_exposed_over_http() {
+        // read_file / write_file / list_dir / http_request are `Expose::cli_only()`
+        // (arbitrary file access + SSRF). The HTTP surface must 404 them — not
+        // dispatch, and not leak that they exist — same as an unknown command.
+        for name in ["read_file", "write_file", "list_dir", "http_request"] {
+            let resp = test_app()
+                .oneshot(post(&format!("/api/v1/commands/{name}"), "{}"))
+                .await
+                .unwrap();
+            assert_eq!(resp.status(), StatusCode::NOT_FOUND, "{name} must be 404");
+        }
     }
 
-    #[tokio::test]
-    async fn unsupported_method_maps_to_422() {
-        let resp = test_app()
-            .oneshot(post(
-                "/api/v1/commands/http_request",
-                r#"{"url":"https://example.com","method":"POST"}"#,
-            ))
-            .await
-            .unwrap();
-        assert_eq!(resp.status(), StatusCode::UNPROCESSABLE_ENTITY);
-        assert_eq!(body_json(resp).await["error"]["code"], "UNSUPPORTED");
+    #[test]
+    fn status_for_maps_command_error_codes() {
+        // The 422 mapping was previously exercised via http_request over HTTP;
+        // now that it's CLI-only, cover the error→status contract directly.
+        assert_eq!(
+            status_for(&CommandError::InvalidInput("x".into())),
+            StatusCode::BAD_REQUEST
+        );
+        assert_eq!(
+            status_for(&CommandError::Unsupported("x".into())),
+            StatusCode::UNPROCESSABLE_ENTITY
+        );
     }
 
     #[tokio::test]

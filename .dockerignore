@@ -8,3 +8,7 @@ docs/
 media/
 dist/
 build/
+# Never ship local secrets into the build context.
+.env
+.env.*
+!.env.example

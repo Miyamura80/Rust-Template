@@ -210,12 +210,14 @@ bump-version: ## Bump version across all manifests (usage: make bump-version VER
 		echo "Usage: make bump-version VERSION=x.y.z"; \
 		exit 1; \
 	fi
-	@perl -i.bak -0pe 's/^version = "[^"]*"/version = "$(VERSION)"/m' crates/cli/Cargo.toml && rm crates/cli/Cargo.toml.bak
+	@for f in crates/cli/Cargo.toml crates/engine/Cargo.toml crates/config/Cargo.toml crates/assetgen/Cargo.toml; do \
+		perl -i.bak -0pe 's/^version = "[^"]*"/version = "$(VERSION)"/m' $$f && rm $$f.bak; \
+	done
 	@jq --arg v "$(VERSION)" '.version = $$v' package.json > /tmp/_package.json && mv /tmp/_package.json package.json
 	@cargo update --workspace
-	@echo "$(GREEN)✅ Version bumped to $(VERSION) in crates/cli/Cargo.toml and package.json$(RESET)"
+	@echo "$(GREEN)✅ Version bumped to $(VERSION) across all crate manifests and package.json$(RESET)"
 	@echo "$(YELLOW)Next steps (cargo-dist cuts the release from the tag):$(RESET)"
-	@echo "  git add crates/cli/Cargo.toml package.json Cargo.lock"
+	@echo "  git add crates/*/Cargo.toml package.json Cargo.lock"
 	@echo "  git commit -m '⚙️ bump version to $(VERSION)'"
 	@echo "  git tag v$(VERSION)"
 	@echo "  git push origin main --tags"

@@ -16,6 +16,13 @@ pub fn ensure_env(root: &Path, dry_run: bool) -> Result<bool> {
     }
     if !dry_run {
         std::fs::copy(&example, &target)?;
+        // `.env` holds `APP__*` secrets — restrict it to the owner so it isn't
+        // world-readable (the copy inherits `.env.example`'s broad perms).
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&target, std::fs::Permissions::from_mode(0o600))?;
+        }
     }
     Ok(true)
 }

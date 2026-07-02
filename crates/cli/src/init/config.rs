@@ -191,10 +191,13 @@ impl Config {
                 SENTINEL_PROJECT_TITLE.to_string(),
                 self.project_name.clone(),
             ));
-            rules.push((
-                SENTINEL_PROJECT_KEBAB.to_string(),
-                kebab_case(&self.project_name),
-            ));
+            // Only rewrite the kebab sentinel when the name yields a valid
+            // (non-empty) kebab; otherwise a name like "!!!" would blank out
+            // `rust-template` in the manifests and break the generated project.
+            let kebab = kebab_case(&self.project_name);
+            if !kebab.is_empty() {
+                rules.push((SENTINEL_PROJECT_KEBAB.to_string(), kebab));
+            }
         }
         if self.cli_name != SENTINEL_CLI {
             rules.push((SENTINEL_CLI.to_string(), self.cli_name.clone()));

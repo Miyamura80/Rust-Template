@@ -7,7 +7,7 @@ WORKDIR /app
 # Cache dependencies first for faster rebuilds.
 COPY Cargo.toml Cargo.lock ./
 COPY crates ./crates
-RUN cargo build --release -p appctl
+RUN cargo build --locked --release -p appctl
 
 # ---- Runtime ----------------------------------------------------------------
 FROM debian:bookworm-slim AS runtime
@@ -27,5 +27,9 @@ ENV APP_CONFIG_PATH=/etc/appctl/global_config.yaml
 ENV APP__SERVER__HOST=0.0.0.0
 ENV APP__SERVER__PORT=8080
 EXPOSE 8080
+
+# Drop root: run the server as a dedicated unprivileged user.
+RUN useradd --system --no-create-home --uid 10001 appctl
+USER appctl
 
 ENTRYPOINT ["appctl", "serve"]

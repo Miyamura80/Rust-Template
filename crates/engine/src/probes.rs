@@ -177,8 +177,10 @@ async fn probe_network(ctx: &AppContext) -> CommandResult {
     r.data = Some(serde_json::json!({
         "dns_addresses": addrs,
         "http_status": status,
+        // Names only — values can embed credentials (e.g. an authenticated
+        // HTTP_PROXY URL) and this probe is reachable over the HTTP API.
+        "proxy_env_set": proxy_env_names(),
         "target_url": host,
-        "proxy_env": collect_proxy_env(),
     }));
     r
 }
@@ -202,7 +204,10 @@ fn probe_net_err(
     r
 }
 
-fn collect_proxy_env() -> HashMap<String, String> {
+/// Names (never values) of the proxy-related env vars that are set. Values are
+/// deliberately omitted: `HTTP_PROXY`/`HTTPS_PROXY` can carry credentials, and
+/// the network probe is reachable over the HTTP API.
+fn proxy_env_names() -> Vec<String> {
     let keys = [
         "HTTP_PROXY",
         "http_proxy",
@@ -211,11 +216,11 @@ fn collect_proxy_env() -> HashMap<String, String> {
         "NO_PROXY",
         "no_proxy",
     ];
-    let mut out = HashMap::new();
-    for k in keys {
-        if let Ok(v) = std::env::var(k) {
-            out.insert(k.to_string(), v);
-        }
-    }
+    let mut out: Vec<String> = keys
+        .into_iter()
+        .filter(|k| std::env::var(k).is_ok())
+        .map(str::to_string)
+        .collect();
+    out.sort();
     out
 }

@@ -55,7 +55,7 @@ export async function callCommand<TOutput, TInput = unknown>(
 	name: string,
 	args: TInput = {} as TInput,
 ): Promise<TOutput> {
-	const res = await fetch(`${API_BASE}/commands/${name}`, {
+	const res = await fetch(`${API_BASE}/commands/${encodeURIComponent(name)}`, {
 		method: "POST",
 		headers: { "content-type": "application/json" },
 		body: JSON.stringify(args ?? {}),

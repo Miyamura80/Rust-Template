@@ -6,7 +6,7 @@
 //! remaining sentinels and no-ops.
 
 use super::config::Config;
-use anyhow::Result;
+use anyhow::{Context, Result};
 use std::path::Path;
 use walkdir::WalkDir;
 
@@ -54,8 +54,12 @@ pub fn apply(config: &Config, root: &Path, dry_run: bool) -> Result<usize> {
             continue;
         }
 
-        let Ok(original) = std::fs::read_to_string(entry.path()) else {
-            continue; // binary / non-utf8 — skip silently
+        // Skip binary / non-UTF-8 files, but surface real read errors (e.g.
+        // permission denied) rather than silently leaving sentinels in place.
+        let original = match std::fs::read_to_string(entry.path()) {
+            Ok(s) => s,
+            Err(e) if e.kind() == std::io::ErrorKind::InvalidData => continue,
+            Err(e) => return Err(e).with_context(|| format!("reading {}", entry.path().display())),
         };
 
         let mut updated = original.clone();
@@ -68,7 +72,8 @@ pub fn apply(config: &Config, root: &Path, dry_run: bool) -> Result<usize> {
         if updated != original {
             changed += 1;
             if !dry_run {
-                std::fs::write(entry.path(), updated)?;
+                std::fs::write(entry.path(), updated)
+                    .with_context(|| format!("writing {}", entry.path().display()))?;
             }
         }
     }

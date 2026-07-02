@@ -46,7 +46,7 @@ impl Command for {{STRUCT}} {
         input: {{STRUCT}}Input,
         _cx: &Ctx<'_>,
     ) -> Result<{{STRUCT}}Output, CommandError> {
-        // TODO: implement. `_cx` exposes fs()/network()/clipboard() capabilities.
+        // TODO: implement. `_cx` exposes fs() and network() capabilities.
         Ok({{STRUCT}}Output {
             echoed: input.message,
         })

@@ -447,7 +447,10 @@ mod tests {
         let reg = CommandRegistry::new();
         let schema = reg.schema("read_file").expect("read_file schema");
         assert_eq!(schema.name, "read_file");
-        assert!(schema.expose.api);
+        // read_file reads a caller-supplied path with no sandbox, so it is
+        // CLI-only — reachable via the CLI, never over the unauthenticated API.
+        assert!(schema.expose.cli);
+        assert!(!schema.expose.api);
         // The input schema should describe the required `path` field.
         let s = serde_json::to_string(&schema.input_schema).unwrap();
         assert!(s.contains("path"), "input schema missing path: {s}");

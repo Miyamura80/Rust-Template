@@ -1,6 +1,6 @@
 //! `list_dir` – list entries in a directory.
 
-use crate::commands::{Command, CommandError};
+use crate::commands::{Command, CommandError, Expose};
 use crate::context::Ctx;
 use crate::register_command;
 use async_trait::async_trait;
@@ -39,6 +39,12 @@ impl Command for ListDir {
 
     fn description(&self) -> &'static str {
         "List the entries of a directory."
+    }
+
+    /// Lists a caller-supplied path with no sandbox — CLI-only so it is not
+    /// reachable as an unauthenticated directory-enumeration over the HTTP API.
+    fn expose(&self) -> Expose {
+        Expose::cli_only()
     }
 
     async fn run(&self, input: ListDirInput, cx: &Ctx<'_>) -> Result<ListDirOutput, CommandError> {

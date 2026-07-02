@@ -189,7 +189,8 @@ async fn main() {
             let cfg = &app_config::get_config().server;
             let host = host.unwrap_or_else(|| cfg.host.clone());
             let port = port.unwrap_or(cfg.port);
-            serve_http::run_server(host, port, ctx, registry).await
+            let settings = serve_http::ServeSettings::from_config(cfg);
+            serve_http::run_server(host, port, ctx, registry, settings).await
         }
     }
 }

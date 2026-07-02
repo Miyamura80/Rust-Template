@@ -30,10 +30,8 @@ pub struct AppConfig {
     #[serde(default)]
     pub features: HashMap<String, bool>,
 
-    // Secret credentials (optional in config file, usually injected via env).
-    // `#[serde(skip_serializing)]` is the security boundary: these never
-    // serialize into any payload (see `FrontendConfig` and the sanitization
-    // test). Prefer the accessor methods below for read access.
+    // Secret credentials — never serialized (`skip_serializing` = the security
+    // boundary; see the sanitization test). Read via the accessors below.
     #[serde(skip_serializing)]
     pub openai_api_key: Option<String>,
     #[serde(skip_serializing)]
@@ -100,12 +98,17 @@ pub struct ExampleParent {
     pub example_child: String,
 }
 
-/// HTTP server bind settings for `appctl serve`. Overridable via
-/// `APP__SERVER__HOST` / `APP__SERVER__PORT` or CLI flags.
+/// HTTP server settings for `appctl serve` (override via `APP__SERVER__*`).
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct ServerConfig {
     pub host: String,
     pub port: u16,
+    /// HTTP request timeout in seconds (`None` → 30s).
+    #[serde(default)]
+    pub request_timeout_secs: Option<u64>,
+    /// Allowed CORS origins; empty = permissive dev default, else locks the API.
+    #[serde(default)]
+    pub cors_allow_origins: Vec<String>,
 }
 
 impl Default for ServerConfig {
@@ -113,6 +116,8 @@ impl Default for ServerConfig {
         Self {
             host: "127.0.0.1".to_string(),
             port: 8080,
+            request_timeout_secs: None,
+            cors_allow_origins: Vec::new(),
         }
     }
 }
@@ -243,13 +248,9 @@ pub fn reset_config() {
     *write = None;
 }
 
-/// Directory that config files are resolved against.
-///
-/// Defaults to this crate's directory (baked in at compile time via
-/// `CARGO_MANIFEST_DIR`), which is correct for `cargo run`/`cargo test`. A
-/// deployed binary should point `APP_CONFIG_PATH` at its config file instead;
-/// sibling files (`production_config.yaml`, `.global_config.yaml`) are then
-/// resolved next to that file.
+/// Directory config files resolve against: this crate's dir
+/// (`CARGO_MANIFEST_DIR`) for `cargo run`/`test`; a deployed binary should set
+/// `APP_CONFIG_PATH` instead (sibling overrides resolve next to that file).
 fn config_base_dir() -> std::path::PathBuf {
     std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
 }

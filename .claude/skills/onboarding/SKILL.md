@@ -26,7 +26,9 @@ other.
      the CLI (`crates/cli/`), the HTTP API (`appctl serve` / the `server`
      module), config (`crates/config/`), `docs/`, and relevant tests
    - Systems `make init` does NOT manage (handle these manually — see step 7):
-     `frontend/`, `Dockerfile`, `docs/` site, release CI (`.github/workflows/`)
+     release CI (`.github/workflows/`). Note `frontend/`, `Dockerfile`, and the
+     `docs/` site ARE pruned by init when their surface/flag is deselected — do
+     not hand-delete them.
 
 2. Interview the user briefly. Prefer grouped multi-select questions:
    - Project shape (`--profile`): `cli-only`, `server-only`, or `cli+server`
@@ -71,8 +73,10 @@ other.
 
 7. Handle the systems onboarding does not touch, after confirming with the user:
    - `frontend/` branding/content (if kept) almost always needs rebranding.
-   - `Dockerfile`, release workflows, and the `docs/` site are not wired into
-     pruning; update or remove them to match the kept surfaces.
+   - Release workflows (`.github/workflows/`) are not wired into pruning; update
+     or remove them to match the kept surfaces. (`frontend/`, `Dockerfile`, and
+     the `docs/` site are pruned automatically by their surface/flag — no manual
+     deletion needed.)
 
 ## Guardrails
 

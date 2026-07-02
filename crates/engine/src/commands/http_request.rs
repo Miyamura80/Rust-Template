@@ -4,7 +4,7 @@
 //! [`NetworkOps`](crate::traits::NetworkOps) capability, exercising the typed
 //! contract, the per-request [`Ctx`], and the capability-error mapping.
 
-use crate::commands::{Command, CommandError};
+use crate::commands::{Command, CommandError, Expose};
 use crate::context::Ctx;
 use crate::register_command;
 use async_trait::async_trait;
@@ -19,7 +19,7 @@ pub struct HttpRequest;
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct HttpRequestInput {
-    /// Absolute URL to fetch (https recommended).
+    /// Absolute URL to fetch. Must use the `https://` scheme.
     pub url: String,
     /// HTTP method. Only `GET` is supported by the network capability today;
     /// anything else returns an `Unsupported` error.
@@ -50,6 +50,12 @@ impl Command for HttpRequest {
         "Perform an outbound HTTP GET and return the status and a body snippet."
     }
 
+    /// Fetches a caller-supplied URL with no scheme/host allowlist — CLI-only so
+    /// it is not reachable as an unauthenticated SSRF primitive over the HTTP API.
+    fn expose(&self) -> Expose {
+        Expose::cli_only()
+    }
+
     async fn run(
         &self,
         input: HttpRequestInput,
@@ -62,7 +68,19 @@ impl Command for HttpRequest {
             )));
         }
 
-        let timeout_ms = input.timeout_ms.unwrap_or(DEFAULT_TIMEOUT_MS);
+        // The capability is `https_get`; enforce the scheme rather than silently
+        // issuing a cleartext request for an `http://` URL.
+        if !input.url.starts_with("https://") {
+            return Err(CommandError::InvalidInput(
+                "url must use the https:// scheme".to_string(),
+            ));
+        }
+
+        // A `0` timeout would fire instantly; treat it (and absent) as the default.
+        let timeout_ms = input
+            .timeout_ms
+            .filter(|&t| t > 0)
+            .unwrap_or(DEFAULT_TIMEOUT_MS);
         let (status, body_snippet) = cx.network().https_get(&input.url, timeout_ms).await?;
         Ok(HttpRequestOutput {
             status,

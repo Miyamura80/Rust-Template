@@ -116,8 +116,9 @@ with a typed trait so every transport gets schemas for free.
 ```
 #[async_trait]
 trait Command {
-    // ONE struct drives the CLI flags, the API request body, and the MCP schema:
-    type Input:  DeserializeOwned + JsonSchema + clap::Args;
+    // ONE struct drives the API request body and the MCP schema. CLI arg-parsing
+    // is layered on separately so `engine` stays free of `clap` (see the note below).
+    type Input:  DeserializeOwned + JsonSchema + Send;
     type Output: Serialize + JsonSchema;
     fn name(&self) -> &'static str;
     fn description(&self) -> &'static str;

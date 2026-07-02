@@ -14,7 +14,9 @@ be fully exercised in CI.
 
 - [ ] **Downloaded binary runs** — On each target OS (macOS, Windows, Linux),
   download the release archive, extract `appctl`, and run `appctl --help`,
-  `appctl call ping --json`, and `appctl doctor --json`.
+  `appctl call ping --json`, and `appctl doctor --json`. Also run `appctl mcp`
+  and confirm the documented stub behaviour: a stderr "not implemented" notice
+  and exit code 69.
 - [ ] **`serve` binds and shuts down** — Run `appctl serve`, hit
   `GET /healthz`, then send SIGINT/SIGTERM (Ctrl-C) and confirm it shuts down
   gracefully without a panic or hung socket.
@@ -40,6 +42,6 @@ live wiring are best verified in a browser.
 ## Onboarding prune (`appctl init`)
 
 - [ ] **Pruned project builds** — In a scratch copy, run `appctl init` for each
-  profile (`cli-only`, `server-only`, `cli+server`, and `--no-frontend`), then
-  run `cargo build --workspace` and `make ci` in the initialized project and
-  confirm it is green.
+  profile (`cli-only`, `server-only`, `cli+server`) and separately with the
+  `--no-frontend` flag, then run `cargo build --workspace` and `make ci` in the
+  initialized project and confirm it is green.

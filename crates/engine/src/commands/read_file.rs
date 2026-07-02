@@ -1,6 +1,6 @@
 //! `read_file` – read a file and return its contents as a UTF-8 string.
 
-use crate::commands::{Command, CommandError};
+use crate::commands::{Command, CommandError, Expose};
 use crate::context::Ctx;
 use crate::register_command;
 use async_trait::async_trait;
@@ -35,6 +35,12 @@ impl Command for ReadFile {
         "Read a file and return its UTF-8 contents."
     }
 
+    /// Reads a caller-supplied path with no sandbox — CLI-only so it is not
+    /// reachable as an unauthenticated arbitrary-file-read over the HTTP API.
+    fn expose(&self) -> Expose {
+        Expose::cli_only()
+    }
+
     async fn run(
         &self,
         input: ReadFileInput,
@@ -43,7 +49,10 @@ impl Command for ReadFile {
         let path = std::path::Path::new(&input.path);
         let data = cx.fs().read_file(path)?;
         let size_bytes = data.len();
-        let content = String::from_utf8_lossy(&data).into_owned();
+        // The output contract is UTF-8; surface a clear error on binary input
+        // rather than silently returning lossily-replaced content.
+        let content = String::from_utf8(data)
+            .map_err(|_| CommandError::InvalidInput("file is not valid UTF-8".to_string()))?;
         Ok(ReadFileOutput {
             content,
             size_bytes,

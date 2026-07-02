@@ -16,12 +16,13 @@ path = "src/main.rs"
 default = ["cli", "http-api"]
 # CLI diagnostic subcommands (doctor / call / probe / run-scenario).
 cli = []
-# The axum HTTP API (`appctl serve`) and its tower middleware stack.
-http-api = ["dep:axum", "dep:tower", "dep:tower-http"]
+# The axum HTTP API (`appctl serve`) and its tower middleware stack. `app-config`
+# is only read by the HTTP server, so a `cli-only` prune drops it too.
+http-api = ["dep:axum", "dep:tower", "dep:tower-http", "dep:app-config"]
 
 [dependencies]
 engine = { path = "../engine" }
-app-config = { path = "../config" }
+app-config = { path = "../config", optional = true }
 rustls = { version = "0.23", default-features = false, features = ["std", "tls12", "ring"] }
 clap = { version = "4", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
