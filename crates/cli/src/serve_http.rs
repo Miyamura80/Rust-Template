@@ -111,15 +111,16 @@ pub async fn run_server(
     };
     let app = build_app(state, &settings);
 
-    let addr = format!("{host}:{port}");
-    let listener = match tokio::net::TcpListener::bind(&addr).await {
+    // Bind with a (host, port) tuple rather than a formatted string so a bare
+    // IPv6 host (e.g. `::1`) resolves correctly instead of being mis-parsed.
+    let listener = match tokio::net::TcpListener::bind((host.as_str(), port)).await {
         Ok(l) => l,
         Err(e) => {
-            eprintln!("error: cannot bind {addr}: {e}");
+            eprintln!("error: cannot bind {host}:{port}: {e}");
             std::process::exit(2);
         }
     };
-    eprintln!("appctl serve listening on http://{addr}");
+    eprintln!("appctl serve listening on http://{host}:{port}");
 
     if let Err(e) = axum::serve(listener, app)
         .with_graceful_shutdown(shutdown_signal())
