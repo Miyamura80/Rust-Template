@@ -69,8 +69,13 @@ impl Command for HttpRequest {
         }
 
         // The capability is `https_get`; enforce the scheme rather than silently
-        // issuing a cleartext request for an `http://` URL.
-        if !input.url.starts_with("https://") {
+        // issuing a cleartext request for an `http://` URL. Schemes are
+        // case-insensitive (RFC 3986 §3.1).
+        let scheme_ok = input
+            .url
+            .split_once("://")
+            .is_some_and(|(scheme, _)| scheme.eq_ignore_ascii_case("https"));
+        if !scheme_ok {
             return Err(CommandError::InvalidInput(
                 "url must use the https:// scheme".to_string(),
             ));

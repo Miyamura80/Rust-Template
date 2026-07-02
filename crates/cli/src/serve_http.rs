@@ -53,10 +53,12 @@ impl Default for ServeSettings {
 }
 
 impl ServeSettings {
-    /// Project the loaded `server` config block into serve-time settings.
+    /// Project the loaded `server` config block into serve-time settings. A
+    /// `0` (or absent) timeout falls back to 30s rather than 408-ing instantly.
     pub fn from_config(cfg: &app_config::ServerConfig) -> Self {
+        let secs = cfg.request_timeout_secs.filter(|&s| s > 0).unwrap_or(30);
         Self {
-            request_timeout: Duration::from_secs(cfg.request_timeout_secs.unwrap_or(30)),
+            request_timeout: Duration::from_secs(secs),
             cors_allow_origins: cfg.cors_allow_origins.clone(),
         }
     }
@@ -68,7 +70,18 @@ fn cors_layer(origins: &[String]) -> CorsLayer {
     if origins.is_empty() {
         return CorsLayer::permissive();
     }
-    let allowed: Vec<HeaderValue> = origins.iter().filter_map(|o| o.parse().ok()).collect();
+    // Surface misconfigured origins instead of silently narrowing the allowlist
+    // (an all-invalid list would otherwise deny every cross-origin request).
+    let allowed: Vec<HeaderValue> = origins
+        .iter()
+        .filter_map(|o| match o.parse::<HeaderValue>() {
+            Ok(v) => Some(v),
+            Err(_) => {
+                eprintln!("warning: ignoring unparseable CORS origin: {o}");
+                None
+            }
+        })
+        .collect();
     CorsLayer::new()
         .allow_origin(allowed)
         .allow_methods(Any)
@@ -109,6 +122,14 @@ pub async fn run_server(
         caps: Arc::new(caps),
         registry: Arc::new(registry),
     };
+    // Permissive CORS is fine for local dev, but warn if it's left open outside
+    // a dev environment so a production deploy doesn't silently accept any origin.
+    if settings.cors_allow_origins.is_empty() && app_config::get_config().dev_env != "dev" {
+        eprintln!(
+            "warning: CORS is permissive (any origin); set server.cors_allow_origins for production"
+        );
+    }
+
     let app = build_app(state, &settings);
 
     // Bind with a (host, port) tuple rather than a formatted string so a bare
@@ -120,7 +141,13 @@ pub async fn run_server(
             std::process::exit(2);
         }
     };
-    eprintln!("appctl serve listening on http://{host}:{port}");
+    // Bracket a bare IPv6 host so the logged URL is valid (`http://[::1]:8080`).
+    let display_host = if host.contains(':') && !host.starts_with('[') {
+        format!("[{host}]")
+    } else {
+        host.clone()
+    };
+    eprintln!("appctl serve listening on http://{display_host}:{port}");
 
     if let Err(e) = axum::serve(listener, app)
         .with_graceful_shutdown(shutdown_signal())

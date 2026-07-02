@@ -17,11 +17,17 @@ pub fn ensure_env(root: &Path, dry_run: bool) -> Result<bool> {
     if !dry_run {
         std::fs::copy(&example, &target)?;
         // `.env` holds `APP__*` secrets — restrict it to the owner so it isn't
-        // world-readable (the copy inherits `.env.example`'s broad perms).
+        // world-readable (the copy inherits `.env.example`'s broad perms). If the
+        // chmod fails, delete the file so secrets aren't left world-readable.
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            std::fs::set_permissions(&target, std::fs::Permissions::from_mode(0o600))?;
+            if let Err(e) =
+                std::fs::set_permissions(&target, std::fs::Permissions::from_mode(0o600))
+            {
+                let _ = std::fs::remove_file(&target);
+                return Err(e.into());
+            }
         }
     }
     Ok(true)
@@ -42,6 +48,22 @@ mod tests {
             std::fs::read_to_string(root.join(".env")).unwrap(),
             "APP__DEV_ENV=dev"
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn seeded_env_is_owner_only() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        std::fs::write(root.join(".env.example"), "APP__OPENAI_API_KEY=secret").unwrap();
+
+        assert!(ensure_env(root, false).unwrap());
+        let mode = std::fs::metadata(root.join(".env"))
+            .unwrap()
+            .permissions()
+            .mode();
+        assert_eq!(mode & 0o777, 0o600, "seeded .env must be owner-only");
     }
 
     #[test]

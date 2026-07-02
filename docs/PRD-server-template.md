@@ -119,7 +119,7 @@ trait Command {
     // ONE struct drives the API request body and the MCP schema. CLI arg-parsing
     // is layered on separately so `engine` stays free of `clap` (see the note below).
     type Input:  DeserializeOwned + JsonSchema + Send;
-    type Output: Serialize + JsonSchema;
+    type Output: Serialize + JsonSchema + Send;
     fn name(&self) -> &'static str;
     fn description(&self) -> &'static str;
     fn expose(&self) -> Expose { Expose::all() }   // per-transport visibility

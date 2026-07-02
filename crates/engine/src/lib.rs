@@ -7,6 +7,7 @@
 pub mod commands;
 pub mod context;
 pub mod doctor;
+mod env;
 pub mod platform;
 pub mod probes;
 pub mod scenario;

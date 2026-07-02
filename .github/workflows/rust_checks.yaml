@@ -54,5 +54,9 @@ jobs:
       # feature combination compiles cleanly on its own (not just the default).
       - name: Clippy (cli-only)
         run: cargo clippy -p appctl --no-default-features --features cli --all-targets -- -D warnings
+      - name: Test (cli-only)
+        run: cargo test -p appctl --no-default-features --features cli
       - name: Clippy (http-api-only)
         run: cargo clippy -p appctl --no-default-features --features http-api --all-targets -- -D warnings
+      - name: Test (http-api-only)
+        run: cargo test -p appctl --no-default-features --features http-api

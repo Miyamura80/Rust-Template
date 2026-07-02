@@ -105,7 +105,9 @@ pub struct DoctorReport {
     pub headless: bool,
     pub session_type: Option<String>,
     pub display_server: Option<String>,
-    pub proxy_env: HashMap<String, String>,
+    /// Names (never values) of the proxy-related env vars that are set — the
+    /// report is served over the HTTP API and values can carry credentials.
+    pub proxy_env_set: Vec<String>,
 }
 
 // ---------------------------------------------------------------------------

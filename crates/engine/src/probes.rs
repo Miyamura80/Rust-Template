@@ -179,7 +179,7 @@ async fn probe_network(ctx: &AppContext) -> CommandResult {
         "http_status": status,
         // Names only — values can embed credentials (e.g. an authenticated
         // HTTP_PROXY URL) and this probe is reachable over the HTTP API.
-        "proxy_env_set": proxy_env_names(),
+        "proxy_env_set": crate::env::proxy_env_names(),
         "target_url": host,
     }));
     r
@@ -202,25 +202,4 @@ fn probe_net_err(
     );
     r.timing_ms.steps = steps;
     r
-}
-
-/// Names (never values) of the proxy-related env vars that are set. Values are
-/// deliberately omitted: `HTTP_PROXY`/`HTTPS_PROXY` can carry credentials, and
-/// the network probe is reachable over the HTTP API.
-fn proxy_env_names() -> Vec<String> {
-    let keys = [
-        "HTTP_PROXY",
-        "http_proxy",
-        "HTTPS_PROXY",
-        "https_proxy",
-        "NO_PROXY",
-        "no_proxy",
-    ];
-    let mut out: Vec<String> = keys
-        .into_iter()
-        .filter(|k| std::env::var(k).is_ok())
-        .map(str::to_string)
-        .collect();
-    out.sort();
-    out
 }

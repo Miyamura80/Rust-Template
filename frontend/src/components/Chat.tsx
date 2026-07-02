@@ -161,8 +161,9 @@ export function Chat() {
 					<output
 						className={`chat-status-dot chat-status-dot--${connectivity}`}
 						title={connectivityLabel}
-						aria-label={connectivityLabel}
-					/>
+					>
+						<span className="sr-only">{connectivityLabel}</span>
+					</output>
 					<span className="chat-header-model">{modelLabel}</span>
 				</div>
 			</header>
