@@ -8,9 +8,9 @@ and (later) MCP; the same registry serves every transport.
 
 - **No transport dependency** – the engine never imports CLI, axum, or HTTP
   types, so it can run in any Rust context (CLI, HTTP API, tests, etc.).
-- **Trait-based OS access** – filesystem, network, and clipboard operations are
-  behind traits (`FilesystemOps`, `NetworkOps`, `ClipboardOps`). Callers inject
-  the implementation they need (real platform vs. headless stubs).
+- **Trait-based OS access** – filesystem and network operations are behind
+  traits (`FilesystemOps`, `NetworkOps`). Callers inject the implementation they
+  need (real platform vs. headless stubs).
 - **Structured results** – every operation returns a `CommandResult` with a
   stable JSON schema including `run_id`, `status`, `error`, `timing_ms`, and
   `env_summary`.
@@ -22,11 +22,11 @@ and (later) MCP; the same registry serves every transport.
 | Module | Purpose |
 |--------|---------|
 | `types` | Output contract: `CommandResult`, `Status`, `ErrorCode`, `EnvSummary`, scenario types |
-| `traits` | OS capability traits: `FilesystemOps`, `NetworkOps`, `ClipboardOps` |
-| `platform` | Real implementations (`StdFilesystem`, `ReqwestNetwork`, `SystemClipboard`) + `HeadlessClipboard` |
+| `traits` | OS capability traits: `FilesystemOps`, `NetworkOps` |
+| `platform` | Real implementations: `StdFilesystem`, `ReqwestNetwork` |
 | `context` | `AppContext` – holds trait objects and config; constructors for platform/headless |
-| `commands` | `CommandRegistry` with built-in commands: `ping`, `read_file`, `write_file` |
-| `probes` | Capability probes: `filesystem`, `network`, `clipboard` |
+| `commands` | `CommandRegistry` with built-in commands: `ping`, `read_file`, `write_file`, … |
+| `probes` | Capability probes: `filesystem`, `network` |
 | `doctor` | Environment diagnostics (OS, kernel, headless detection, proxy vars) |
 | `scenario` | YAML scenario parser and async runner |
 
@@ -65,16 +65,15 @@ register_command!(MyCommand); // at the bottom of commands/my_command.rs
 Implement custom capability providers by implementing the traits:
 
 ```rust
-use engine::traits::{ClipboardOps, CapResult, CapError};
+use engine::traits::{FilesystemOps, CapResult, CapError, DirEntry};
+use std::path::{Path, PathBuf};
 
-struct MyClipboard;
+struct ReadOnlyFs;
 
-impl ClipboardOps for MyClipboard {
-    fn read_text(&self) -> CapResult<String> {
-        Err(CapError::Unsupported("not available".into()))
+impl FilesystemOps for ReadOnlyFs {
+    fn write_file(&self, _path: &Path, _data: &[u8]) -> CapResult<()> {
+        Err(CapError::PermissionDenied("read-only filesystem".into()))
     }
-    fn write_text(&self, _text: &str) -> CapResult<()> {
-        Err(CapError::Unsupported("not available".into()))
-    }
+    // ...implement the remaining FilesystemOps methods...
 }
 ```

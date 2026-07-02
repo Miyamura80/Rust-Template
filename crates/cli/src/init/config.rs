@@ -229,11 +229,18 @@ impl Config {
         }
 
         if !self.frontend {
-            // The frontend is self-contained under `frontend/`; deleting it plus
-            // stripping its deps/scripts from the root package.json removes it.
+            // The frontend's sources live in `frontend/`, but it also contributes
+            // deps/scripts to the root package.json and owns the root TS + knip
+            // configs. Remove all of them so the pruned project has no dangling
+            // references (a bare `bun run knip` / `tsc` would otherwise fail).
             ops.push(PruneOp::DeletePath(root.join("frontend")));
+            ops.push(PruneOp::DeletePath(root.join("tsconfig.json")));
+            ops.push(PruneOp::DeletePath(root.join("tsconfig.node.json")));
             ops.push(PruneOp::StripFrontendPackageJson {
                 manifest: root.join("package.json"),
+            });
+            ops.push(PruneOp::DropKnipFrontendWorkspace {
+                manifest: root.join("knip.json"),
             });
         }
 
@@ -270,6 +277,8 @@ pub enum PruneOp {
     DropPackageJsonWorkspace { manifest: PathBuf, name: String },
     /// Strip frontend deps/scripts from package.json.
     StripFrontendPackageJson { manifest: PathBuf },
+    /// Remove the root (`"."`) frontend workspace from knip.json.
+    DropKnipFrontendWorkspace { manifest: PathBuf },
 }
 
 impl PruneOp {
@@ -285,6 +294,9 @@ impl PruneOp {
             }
             PruneOp::StripFrontendPackageJson { manifest } => {
                 format!("{}: strip frontend deps + scripts", manifest.display())
+            }
+            PruneOp::DropKnipFrontendWorkspace { manifest } => {
+                format!("{}: drop frontend workspace", manifest.display())
             }
         }
     }
@@ -362,6 +374,27 @@ mod tests {
         assert!(ops
             .iter()
             .any(|o| matches!(o, PruneOp::DeletePath(p) if p.ends_with("serve_http.rs"))));
+    }
+
+    #[test]
+    fn no_frontend_prunes_dangling_ts_and_knip_configs() {
+        let mut c = Config::from_profile(Profile::ServerOnly);
+        c.frontend = false;
+        c.expand();
+        let ops = c.prune_ops(Path::new("."));
+        for rel in ["frontend", "tsconfig.json", "tsconfig.node.json"] {
+            assert!(
+                ops.iter()
+                    .any(|o| matches!(o, PruneOp::DeletePath(p) if p.ends_with(rel))),
+                "expected DeletePath for {rel}"
+            );
+        }
+        assert!(ops
+            .iter()
+            .any(|o| matches!(o, PruneOp::DropKnipFrontendWorkspace { .. })));
+        assert!(ops
+            .iter()
+            .any(|o| matches!(o, PruneOp::StripFrontendPackageJson { .. })));
     }
 
     #[test]

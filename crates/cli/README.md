@@ -60,9 +60,6 @@ appctl probe filesystem --json
 
 # Network probe (DNS resolve + HTTPS GET)
 appctl probe network --json
-
-# Clipboard probe (returns SKIP if headless)
-appctl probe clipboard --json
 ```
 
 ### run-scenario

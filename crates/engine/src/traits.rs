@@ -61,12 +61,3 @@ pub trait NetworkOps: Send + Sync {
     /// Perform an HTTPS GET and return (status_code, body_snippet).
     async fn https_get(&self, url: &str, timeout_ms: u64) -> CapResult<(u16, String)>;
 }
-
-// ---------------------------------------------------------------------------
-// Clipboard operations
-// ---------------------------------------------------------------------------
-
-pub trait ClipboardOps: Send + Sync {
-    fn read_text(&self) -> CapResult<String>;
-    fn write_text(&self, text: &str) -> CapResult<()>;
-}

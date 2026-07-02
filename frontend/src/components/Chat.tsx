@@ -116,6 +116,13 @@ export function Chat() {
 	}
 
 	const modelLabel = config?.default_llm?.default_model ?? "Assistant";
+	const connectivity =
+		backendOnline === null ? "unknown" : backendOnline ? "online" : "offline";
+	const connectivityLabel = {
+		unknown: "Checking API…",
+		online: "API connected",
+		offline: "API offline — run `appctl serve`",
+	}[connectivity];
 
 	return (
 		<div className="chat-layout">
@@ -152,20 +159,8 @@ export function Chat() {
 						</svg>
 					</button>
 					<span
-						className={`chat-status-dot chat-status-dot--${
-							backendOnline === null
-								? "unknown"
-								: backendOnline
-									? "online"
-									: "offline"
-						}`}
-						title={
-							backendOnline === null
-								? "Checking API…"
-								: backendOnline
-									? "API connected"
-									: "API offline — run `appctl serve`"
-						}
+						className={`chat-status-dot chat-status-dot--${connectivity}`}
+						title={connectivityLabel}
 					/>
 					<span className="chat-header-model">{modelLabel}</span>
 				</div>

@@ -1,7 +1,7 @@
 //! Application context – holds capability trait objects and config.
 //!
 //! Two layers, mirroring the transport design:
-//! - [`AppContext`] holds the shared OS capabilities (fs/net/clipboard). It is
+//! - [`AppContext`] holds the shared OS capabilities (fs/net). It is
 //!   built once at process/transport start and shared (e.g. behind an `Arc` in
 //!   the HTTP server's state).
 //! - [`Ctx`] is constructed **per request/invocation**, borrowing the shared
@@ -9,9 +9,9 @@
 //!   Commands receive `&Ctx`. This is the seam where auth/identity would later
 //!   attach — no identity field exists yet, by design.
 
-use crate::platform::{HeadlessClipboard, ReqwestNetwork, StdFilesystem, SystemClipboard};
+use crate::platform::{ReqwestNetwork, StdFilesystem};
 use crate::traits::*;
-use crate::types::{detect_headless, new_run_id};
+use crate::types::new_run_id;
 use std::time::Instant;
 
 /// Central context passed to all engine operations.
@@ -21,37 +21,24 @@ use std::time::Instant;
 pub struct AppContext {
     fs: Box<dyn FilesystemOps>,
     network: Box<dyn NetworkOps>,
-    clipboard: Box<dyn ClipboardOps>,
     /// Target host for network probe (configurable).
     pub network_probe_host: String,
 }
 
 impl AppContext {
-    pub fn new(
-        fs: Box<dyn FilesystemOps>,
-        network: Box<dyn NetworkOps>,
-        clipboard: Box<dyn ClipboardOps>,
-    ) -> Self {
+    pub fn new(fs: Box<dyn FilesystemOps>, network: Box<dyn NetworkOps>) -> Self {
         Self {
             fs,
             network,
-            clipboard,
             network_probe_host: "https://httpbin.org/get".to_string(),
         }
     }
 
-    /// Create a context with real platform implementations, choosing the
-    /// appropriate clipboard based on headless detection.
+    /// Create a context with real platform implementations.
     pub fn default_platform() -> Self {
-        let clipboard: Box<dyn ClipboardOps> = if detect_headless() {
-            Box::new(HeadlessClipboard)
-        } else {
-            Box::new(SystemClipboard)
-        };
         Self {
             fs: Box::new(StdFilesystem),
             network: Box::new(ReqwestNetwork),
-            clipboard,
             network_probe_host: "https://httpbin.org/get".to_string(),
         }
     }
@@ -61,7 +48,6 @@ impl AppContext {
         Self {
             fs: Box::new(StdFilesystem),
             network: Box::new(ReqwestNetwork),
-            clipboard: Box::new(HeadlessClipboard),
             network_probe_host: "https://httpbin.org/get".to_string(),
         }
     }
@@ -72,10 +58,6 @@ impl AppContext {
 
     pub fn network(&self) -> &dyn NetworkOps {
         self.network.as_ref()
-    }
-
-    pub fn clipboard(&self) -> &dyn ClipboardOps {
-        self.clipboard.as_ref()
     }
 }
 
@@ -131,9 +113,5 @@ impl<'a> Ctx<'a> {
 
     pub fn network(&self) -> &dyn NetworkOps {
         self.caps.network()
-    }
-
-    pub fn clipboard(&self) -> &dyn ClipboardOps {
-        self.caps.clipboard()
     }
 }

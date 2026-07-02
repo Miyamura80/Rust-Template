@@ -1,4 +1,4 @@
-//! Targeted capability probes – filesystem, network, clipboard.
+//! Targeted capability probes – filesystem, network.
 
 use crate::context::AppContext;
 use crate::traits::CapError;
@@ -11,7 +11,6 @@ pub async fn run_probe(name: &str, ctx: &AppContext) -> CommandResult {
     match name {
         "filesystem" => probe_filesystem(ctx),
         "network" => probe_network(ctx).await,
-        "clipboard" => probe_clipboard(ctx),
         _ => {
             let run_id = new_run_id();
             result_err(
@@ -20,10 +19,7 @@ pub async fn run_probe(name: &str, ctx: &AppContext) -> CommandResult {
                 &run_id,
                 0,
                 ErrorCode::InvalidInput,
-                format!(
-                    "unknown probe: {} (available: filesystem, network, clipboard)",
-                    name
-                ),
+                format!("unknown probe: {} (available: filesystem, network)", name),
             )
         }
     }
@@ -224,113 +220,4 @@ fn collect_proxy_env() -> HashMap<String, String> {
         }
     }
     out
-}
-
-// ---------------------------------------------------------------------------
-// Clipboard probe
-// ---------------------------------------------------------------------------
-
-fn probe_clipboard(ctx: &AppContext) -> CommandResult {
-    let run_id = new_run_id();
-    let start = Instant::now();
-    let mut steps = HashMap::new();
-
-    // If headless, skip immediately
-    if detect_headless() {
-        return result_skip(
-            "probe",
-            "clipboard",
-            &run_id,
-            start.elapsed().as_millis() as u64,
-            "headless environment – no clipboard access",
-        );
-    }
-
-    let test_text = format!("engine_clipboard_probe_{}", &run_id[..8]);
-
-    // Step 1: write
-    let t0 = Instant::now();
-    match ctx.clipboard().write_text(&test_text) {
-        Ok(()) => {
-            steps.insert("write".into(), t0.elapsed().as_millis() as u64);
-        }
-        Err(e) => {
-            steps.insert("write".into(), t0.elapsed().as_millis() as u64);
-            return clipboard_err_result(&run_id, start, steps, "write", &e);
-        }
-    }
-
-    // Step 2: read back
-    let t1 = Instant::now();
-    match ctx.clipboard().read_text() {
-        Ok(text) => {
-            steps.insert("read".into(), t1.elapsed().as_millis() as u64);
-            if text.trim() != test_text {
-                let mut r = result_err(
-                    "probe",
-                    "clipboard",
-                    &run_id,
-                    start.elapsed().as_millis() as u64,
-                    ErrorCode::ExternalInterference,
-                    "clipboard read-back does not match written text",
-                );
-                r.timing_ms.steps = steps;
-                return r;
-            }
-        }
-        Err(e) => {
-            steps.insert("read".into(), t1.elapsed().as_millis() as u64);
-            return clipboard_err_result(&run_id, start, steps, "read", &e);
-        }
-    }
-
-    let mut r = result_ok(
-        "probe",
-        "clipboard",
-        &run_id,
-        start.elapsed().as_millis() as u64,
-    );
-    r.timing_ms.steps = steps;
-    r
-}
-
-fn clipboard_err_result(
-    run_id: &str,
-    start: Instant,
-    steps: HashMap<String, u64>,
-    failed_step: &str,
-    err: &CapError,
-) -> CommandResult {
-    let code = match err {
-        CapError::Unsupported(_) => ErrorCode::Unsupported,
-        CapError::DependencyMissing(_) => ErrorCode::DependencyMissing,
-        CapError::PermissionDenied(_) => ErrorCode::PermissionDenied,
-        _ => ErrorCode::InternalError,
-    };
-    // For unsupported/dependency-missing, return skip rather than error
-    let status = match code {
-        ErrorCode::Unsupported | ErrorCode::DependencyMissing => Status::Skip,
-        _ => Status::Error,
-    };
-    let mut r = CommandResult {
-        run_id: run_id.to_string(),
-        command: "probe".to_string(),
-        target: "clipboard".to_string(),
-        status,
-        error: Some(ErrorInfo {
-            code,
-            message: format!("clipboard probe failed at {}: {}", failed_step, err),
-            details: serde_json::Value::Null,
-        }),
-        timing_ms: TimingInfo {
-            total: start.elapsed().as_millis() as u64,
-            steps,
-        },
-        artifacts: vec![],
-        env_summary: EnvSummary::default(),
-        data: None,
-    };
-    // Ensure timing is set
-    r.timing_ms.total = start.elapsed().as_millis() as u64;
-    r
 }

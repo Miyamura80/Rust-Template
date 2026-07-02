@@ -9,17 +9,17 @@ use anyhow::{Context, Result};
 use std::path::Path;
 
 /// Frontend dependency keys removed by [`PruneOp::StripFrontendPackageJson`].
+/// These are the only deps the frontend contributes to the root manifest;
+/// stripping them (plus deleting `frontend/` and the TS/knip configs) leaves a
+/// clean, lint-green project with no dangling references.
 const FRONTEND_DEPS: &[&str] = &[
     "react",
     "react-dom",
-    "@tauri-apps/api",
-    "@tauri-apps/plugin-opener",
-    "@tauri-apps/plugin-process",
-    "@tauri-apps/plugin-updater",
     "@vitejs/plugin-react",
     "@types/react",
     "@types/react-dom",
     "vite",
+    "typescript",
 ];
 
 /// Frontend npm scripts removed alongside the deps.
@@ -63,7 +63,27 @@ fn execute(op: &PruneOp) -> Result<bool> {
             drop_package_json_workspace(manifest, name)
         }
         PruneOp::StripFrontendPackageJson { manifest } => strip_frontend_package_json(manifest),
+        PruneOp::DropKnipFrontendWorkspace { manifest } => drop_knip_frontend_workspace(manifest),
     }
+}
+
+/// Remove the root (`"."`) frontend workspace from `knip.json` so a
+/// frontend-pruned project's `bun run knip` doesn't point at deleted files.
+fn drop_knip_frontend_workspace(manifest: &Path) -> Result<bool> {
+    if !manifest.exists() {
+        return Ok(false);
+    }
+    let text = std::fs::read_to_string(manifest)?;
+    let mut json: serde_json::Value = serde_json::from_str(&text)?;
+    let removed = json
+        .get_mut("workspaces")
+        .and_then(|w| w.as_object_mut())
+        .map(|ws| ws.remove(".").is_some())
+        .unwrap_or(false);
+    if removed {
+        write_json(manifest, &json)?;
+    }
+    Ok(removed)
 }
 
 fn drop_cargo_default_feature(manifest: &Path, feature: &str) -> Result<bool> {
@@ -180,6 +200,25 @@ mod tests {
         assert!(json["dependencies"].get("zod").is_some());
         assert!(json["scripts"].get("dev").is_none());
         assert!(json["scripts"].get("knip").is_some());
+    }
+
+    #[test]
+    fn drops_knip_frontend_workspace_keeps_docs() {
+        let dir = tempfile::tempdir().unwrap();
+        let manifest = dir.path().join("knip.json");
+        std::fs::write(
+            &manifest,
+            r#"{"workspaces":{".":{"entry":["frontend/src/main.tsx"]},"docs":{"entry":["app/page.tsx"]}}}"#,
+        )
+        .unwrap();
+
+        assert!(drop_knip_frontend_workspace(&manifest).unwrap());
+        let json: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&manifest).unwrap()).unwrap();
+        assert!(json["workspaces"].get(".").is_none());
+        assert!(json["workspaces"].get("docs").is_some());
+        // Idempotent second run.
+        assert!(!drop_knip_frontend_workspace(&manifest).unwrap());
     }
 
     #[test]

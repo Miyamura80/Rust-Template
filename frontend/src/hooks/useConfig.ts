@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ApiError, fetchConfig } from "../api/client";
+import { describeError, fetchConfig } from "../api/client";
 
 export interface AppConfig {
 	model_name: string;
@@ -31,22 +31,21 @@ export function useConfig() {
 	const [error, setError] = useState<string | null>(null);
 
 	useEffect(() => {
+		let cancelled = false;
 		fetchConfig<AppConfig>()
 			.then((data) => {
+				if (cancelled) return;
 				setConfig(data);
 				setLoading(false);
 			})
 			.catch((err) => {
-				// ApiError carries the server's error code (e.g. INTERNAL_ERROR).
-				setError(
-					err instanceof ApiError
-						? `${err.code}: ${err.message}`
-						: err instanceof Error
-							? err.message
-							: String(err),
-				);
+				if (cancelled) return;
+				setError(describeError(err));
 				setLoading(false);
 			});
+		return () => {
+			cancelled = true;
+		};
 	}, []);
 
 	return { config, loading, error };

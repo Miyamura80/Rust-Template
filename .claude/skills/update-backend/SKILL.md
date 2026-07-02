@@ -19,7 +19,7 @@ The backend is split into two layers:
 ### Design Principles (engine)
 
 - **No transport dependency** — never import CLI, axum, or HTTP types inside `crates/engine`.
-- **Trait-based OS access** — filesystem, network, and clipboard go through `FilesystemOps`, `NetworkOps`, `ClipboardOps`. Inject real platform or headless stubs via `AppContext`.
+- **Trait-based OS access** — filesystem and network go through `FilesystemOps`, `NetworkOps`. Inject real platform or headless stubs via `AppContext`.
 - **Structured results** — every operation returns `CommandResult` with `run_id`, `status`, `error`, `timing_ms`, and `env_summary`.
 - **No panics on missing capabilities** — headless environments get `SKIP` or `UNSUPPORTED` error codes.
 
@@ -75,7 +75,7 @@ impl Command for MyCommand {
     async fn run(&self, input: MyCommandInput, cx: &Ctx<'_>)
         -> Result<MyCommandOutput, CommandError>
     {
-        // `cx.fs()`, `cx.network()`, `cx.clipboard()` reach the capabilities;
+        // `cx.fs()`, `cx.network()` reach the capabilities;
         // `cx.request_id` / `cx.deadline` are request-scoped.
         Ok(MyCommandOutput { result: input.key })
     }
@@ -109,16 +109,17 @@ appctl call my_command --args '{"key": "value"}' --json
 Implement the relevant trait from `crates/engine/src/traits.rs`:
 
 ```rust
-use engine::traits::{ClipboardOps, CapResult, CapError};
+use engine::traits::{NetworkOps, CapResult, CapError};
 
-struct MyClipboard;
+struct OfflineNetwork;
 
-impl ClipboardOps for MyClipboard {
-    fn read_text(&self) -> CapResult<String> {
-        Err(CapError::Unsupported("not available".into()))
+#[async_trait::async_trait]
+impl NetworkOps for OfflineNetwork {
+    async fn dns_resolve(&self, _host: &str) -> CapResult<Vec<String>> {
+        Err(CapError::Unsupported("offline".into()))
     }
-    fn write_text(&self, _text: &str) -> CapResult<()> {
-        Err(CapError::Unsupported("not available".into()))
+    async fn https_get(&self, _url: &str, _timeout_ms: u64) -> CapResult<(u16, String)> {
+        Err(CapError::Unsupported("offline".into()))
     }
 }
 ```
