@@ -3,9 +3,11 @@
 [advisories]
 ignore = [
     # UNMAINTAINED TRANSITIVE - image encoding stack.
-    # The asset-gen crate pulls in `image` -> `ravif` -> `rav1e` -> `paste`.
-    # `paste` is unmaintained; there is no drop-in replacement upstream yet.
+    # The asset-gen crate pulls in `image` -> `ravif` -> `rav1e`, which drags in
+    # both of these. Neither has a safe upgrade upstream yet; they are build-time
+    # image tooling, not on the server/CLI request path.
     "RUSTSEC-2024-0436", # paste is unmaintained (rav1e -> ravif -> image, via asset-gen)
+    "RUSTSEC-2026-0105", # core2 unmaintained + yanked, no safe upgrade (rav1e -> bitstream-io -> core2)
 ]
 
 [licenses]
