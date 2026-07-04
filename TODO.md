@@ -28,12 +28,15 @@
 - [ ] Result upload / "push mode": POST `result.json` + artifact zip to a server
 - [ ] HTML report generation from artifact directories
 
-### Emit Events (Desktop Simulation)
+### Emit Events (Desktop Simulation) — DROPPED
 
-- [ ] Implement `tray-click` via platform APIs
-- [ ] Implement `deep-link` via custom URL scheme invocation
-- [ ] Implement `file-drop` via synthetic drag-and-drop events
-- [ ] Implement `app-focus` via window manager APIs
+Not applicable to a server template: PRD §8b removed the desktop `emit` command
+(always Unsupported on a server). Kept here only as historical context.
+
+- [ ] ~~Implement `tray-click` via platform APIs~~
+- [ ] ~~Implement `deep-link` via custom URL scheme invocation~~
+- [ ] ~~Implement `file-drop` via synthetic drag-and-drop events~~
+- [ ] ~~Implement `app-focus` via window manager APIs~~
 
 ### Scenario Runner Enhancements
 
@@ -45,8 +48,8 @@
 
 ### Engine
 
-- [ ] More built-in commands (system_info, list_dir, http_request)
-- [ ] Async command support
+- [x] More built-in commands (system_info, list_dir, http_request)
+- [x] Async command support
 - [ ] Plugin system for custom command registration
 
 ### CLI

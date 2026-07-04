@@ -7,6 +7,8 @@
 //! transport. Transports are cargo features (`cli`, `http-api`) so `appctl
 //! init` can prune a surface and still leave a compiling project.
 
+#[cfg(feature = "cli")]
+mod diagnostics;
 mod init;
 mod mcp;
 mod scaffold;
@@ -15,12 +17,8 @@ mod serve_http;
 
 use clap::{Parser, Subcommand};
 
-#[cfg(feature = "cli")]
-use engine::types::*;
 #[cfg(any(feature = "cli", feature = "http-api"))]
 use engine::{AppContext, CommandRegistry};
-#[cfg(feature = "cli")]
-use engine::{CommandResult, Ctx};
 #[cfg(feature = "cli")]
 use std::path::PathBuf;
 
@@ -70,7 +68,7 @@ enum Commands {
         /// Output as JSON.
         #[arg(long)]
         json: bool,
-        /// Timeout duration (e.g. "30s", "5000ms"). Currently informational.
+        /// Abort the command after this long (e.g. "30s", "5000ms", "2m").
         #[arg(long)]
         timeout: Option<String>,
         /// Directory for artifacts output.
@@ -149,18 +147,18 @@ async fn main() {
         }
         Commands::Mcp => mcp::run(),
         #[cfg(feature = "cli")]
-        Commands::Doctor { json, out } => cmd_doctor(json, out).await,
+        Commands::Doctor { json, out } => diagnostics::cmd_doctor(json, out).await,
         #[cfg(feature = "cli")]
         Commands::Call {
             cmd,
             args,
             json,
-            timeout: _,
+            timeout,
             artifacts,
         } => {
             let ctx = AppContext::default();
             let registry = CommandRegistry::new();
-            cmd_call(&cmd, &args, json, artifacts, &ctx, &registry).await
+            diagnostics::cmd_call(&cmd, &args, json, timeout, artifacts, &ctx, &registry).await
         }
         #[cfg(feature = "cli")]
         Commands::Probe {
@@ -169,7 +167,7 @@ async fn main() {
             artifacts,
         } => {
             let ctx = AppContext::default();
-            cmd_probe(&target, json, artifacts, &ctx).await
+            diagnostics::cmd_probe(&target, json, artifacts, &ctx).await
         }
         #[cfg(feature = "cli")]
         Commands::RunScenario {
@@ -180,321 +178,29 @@ async fn main() {
         } => {
             let ctx = AppContext::default();
             let registry = CommandRegistry::new();
-            cmd_run_scenario(&file, json, interactive, artifacts, &ctx, &registry).await
+            diagnostics::cmd_run_scenario(&file, json, interactive, artifacts, &ctx, &registry)
+                .await
         }
         #[cfg(feature = "http-api")]
         Commands::Serve { host, port } => {
             let ctx = AppContext::default();
             let registry = CommandRegistry::new();
-            let cfg = &app_config::get_config().server;
+            let config = match app_config::try_get_config() {
+                Ok(c) => c,
+                Err(e) => {
+                    eprintln!("error: failed to load configuration: {e}");
+                    eprintln!(
+                        "hint: ensure global_config.yaml exists, or set APP_CONFIG_PATH \
+                         to point at your config file."
+                    );
+                    std::process::exit(1);
+                }
+            };
+            let cfg = &config.server;
             let host = host.unwrap_or_else(|| cfg.host.clone());
             let port = port.unwrap_or(cfg.port);
             let settings = serve_http::ServeSettings::from_config(cfg);
             serve_http::run_server(host, port, ctx, registry, settings).await
         }
-    }
-}
-
-// Subcommand implementations (CLI diagnostics)
-
-#[cfg(feature = "cli")]
-async fn cmd_doctor(json: bool, out: Option<PathBuf>) {
-    let result = engine::doctor::run_doctor();
-    if let Some(ref path) = out {
-        write_result_file(path, &result);
-    }
-    output_result(&result, json);
-}
-
-#[cfg(feature = "cli")]
-async fn cmd_call(
-    cmd: &str,
-    args_str: &str,
-    json: bool,
-    artifacts: Option<PathBuf>,
-    ctx: &AppContext,
-    registry: &CommandRegistry,
-) {
-    let args: serde_json::Value = match serde_json::from_str(args_str) {
-        Ok(v) => v,
-        Err(e) => {
-            let r = result_err(
-                "call",
-                cmd,
-                &new_run_id(),
-                0,
-                ErrorCode::InvalidInput,
-                format!("invalid JSON args: {}", e),
-            );
-            output_result(&r, json);
-            return;
-        }
-    };
-
-    let cx = Ctx::new(ctx);
-    let result = registry.execute(cmd, args, &cx).await;
-    if let Some(ref dir) = artifacts {
-        write_artifacts(dir, &result);
-    }
-    output_result(&result, json);
-}
-
-#[cfg(feature = "cli")]
-async fn cmd_probe(target: &str, json: bool, artifacts: Option<PathBuf>, ctx: &AppContext) {
-    let result = engine::probes::run_probe(target, ctx).await;
-    if let Some(ref dir) = artifacts {
-        write_artifacts(dir, &result);
-    }
-    output_result(&result, json);
-}
-
-#[cfg(feature = "cli")]
-async fn cmd_run_scenario(
-    file: &PathBuf,
-    json: bool,
-    interactive: bool,
-    artifacts: Option<PathBuf>,
-    ctx: &AppContext,
-    registry: &CommandRegistry,
-) {
-    let yaml = match std::fs::read_to_string(file) {
-        Ok(s) => s,
-        Err(e) => {
-            let r = result_err(
-                "run-scenario",
-                &file.display().to_string(),
-                &new_run_id(),
-                0,
-                ErrorCode::IoError,
-                format!("cannot read scenario file: {}", e),
-            );
-            output_result(&r, json);
-            return;
-        }
-    };
-
-    let scenario = match engine::scenario::load_scenario(&yaml) {
-        Ok(s) => s,
-        Err(e) => {
-            let r = result_err(
-                "run-scenario",
-                &file.display().to_string(),
-                &new_run_id(),
-                0,
-                ErrorCode::InvalidInput,
-                e,
-            );
-            output_result(&r, json);
-            return;
-        }
-    };
-
-    let scenario_result = if interactive {
-        if !std::io::IsTerminal::is_terminal(&std::io::stdin()) {
-            eprintln!("error: --interactive requires a TTY (stdin is not a terminal)");
-            std::process::exit(1);
-        }
-        engine::scenario::run_scenario_interactive(
-            &scenario,
-            ctx,
-            registry,
-            |idx, total, label, can_go_back| {
-                use engine::scenario::StepChoice;
-
-                // block_in_place tells Tokio this closure will block on TTY I/O,
-                // so it can move async tasks off this worker thread.
-                tokio::task::block_in_place(|| {
-                    eprintln!("\n--- Step {}/{}: {} ---", idx + 1, total, label);
-
-                    let mut choices = vec!["Run", "Skip"];
-                    if can_go_back {
-                        choices.push("\u{2190} Go back");
-                    }
-
-                    let selection = match dialoguer::Select::new()
-                        .with_prompt("Run this step?")
-                        .items(&choices)
-                        .default(0)
-                        .interact_opt()
-                    {
-                        Ok(Some(s)) => s,
-                        Ok(None) => return None,
-                        Err(e) => {
-                            eprintln!("error: interactive prompt failed: {e}");
-                            return None;
-                        }
-                    };
-
-                    Some(match choices[selection] {
-                        "Run" => StepChoice::Run,
-                        "Skip" => StepChoice::Skip,
-                        _ => StepChoice::GoBack,
-                    })
-                })
-            },
-            |idx, total, label| {
-                use engine::scenario::FailureChoice;
-
-                tokio::task::block_in_place(|| {
-                    eprintln!("\n--- Step {}/{}: {} FAILED ---", idx + 1, total, label);
-
-                    let choices = ["Continue to next step", "Abort scenario"];
-                    let selection = match dialoguer::Select::new()
-                        .with_prompt("Step failed. What would you like to do?")
-                        .items(choices)
-                        .default(0)
-                        .interact_opt()
-                    {
-                        Ok(Some(s)) => s,
-                        Ok(None) => return None,
-                        Err(e) => {
-                            eprintln!("error: interactive prompt failed: {e}");
-                            return None;
-                        }
-                    };
-
-                    Some(match choices[selection] {
-                        "Continue to next step" => FailureChoice::Continue,
-                        _ => FailureChoice::Abort,
-                    })
-                })
-            },
-        )
-        .await
-    } else {
-        engine::scenario::run_scenario(&scenario, ctx, registry).await
-    };
-
-    if json {
-        let j = serde_json::to_string_pretty(&scenario_result).unwrap_or_default();
-        println!("{}", j);
-    } else {
-        println!(
-            "Scenario: {}",
-            scenario_result.name.as_deref().unwrap_or("<unnamed>")
-        );
-        println!("Overall: {:?}", scenario_result.overall_status);
-        for (i, sr) in scenario_result.step_results.iter().enumerate() {
-            println!(
-                "  Step {}: {} -> {:?} ({}ms)",
-                i, sr.target, sr.status, sr.timing_ms.total
-            );
-        }
-    }
-
-    if let Some(ref dir) = artifacts {
-        let run_id = new_run_id();
-        let art_dir = dir.join(&run_id);
-        let _ = std::fs::create_dir_all(&art_dir);
-        let result_path = art_dir.join("result.json");
-        let j = serde_json::to_string_pretty(&scenario_result).unwrap_or_default();
-        let _ = std::fs::write(&result_path, j);
-
-        // Write per-step results as events.jsonl
-        let events_path = art_dir.join("events.jsonl");
-        let mut lines = String::new();
-        for sr in &scenario_result.step_results {
-            if let Ok(line) = serde_json::to_string(sr) {
-                lines.push_str(&line);
-                lines.push('\n');
-            }
-        }
-        let _ = std::fs::write(&events_path, lines);
-    }
-}
-
-// Output helpers
-
-#[cfg(feature = "cli")]
-fn output_result(result: &CommandResult, json: bool) {
-    if json {
-        let j = serde_json::to_string_pretty(result).unwrap_or_default();
-        println!("{}", j);
-    } else {
-        print_human(result);
-    }
-
-    // Exit with non-zero status on error/fail
-    match result.status {
-        Status::Pass | Status::Skip => {}
-        Status::Fail => std::process::exit(1),
-        Status::Error => std::process::exit(2),
-    }
-}
-
-#[cfg(feature = "cli")]
-fn print_human(r: &CommandResult) {
-    let status_icon = match r.status {
-        Status::Pass => "PASS",
-        Status::Fail => "FAIL",
-        Status::Skip => "SKIP",
-        Status::Error => "ERROR",
-    };
-
-    println!("[{}] {} {}", status_icon, r.command, r.target);
-    println!("  run_id: {}", r.run_id);
-    println!("  timing: {}ms", r.timing_ms.total);
-
-    if !r.timing_ms.steps.is_empty() {
-        for (step, ms) in &r.timing_ms.steps {
-            println!("    {}: {}ms", step, ms);
-        }
-    }
-
-    if let Some(ref err) = r.error {
-        println!("  error:  {} – {}", err.code, err.message);
-    }
-
-    if let Some(ref data) = r.data {
-        // Print compact data for human output
-        if let Ok(s) = serde_json::to_string_pretty(data) {
-            // Indent each line
-            for line in s.lines() {
-                println!("  {}", line);
-            }
-        }
-    }
-
-    println!(
-        "  env: os={} arch={} headless={}",
-        r.env_summary.os, r.env_summary.arch, r.env_summary.headless
-    );
-}
-
-// Artifact helpers
-
-#[cfg(feature = "cli")]
-fn write_result_file(path: &std::path::Path, result: &CommandResult) {
-    let j = serde_json::to_string_pretty(result).unwrap_or_default();
-    if let Err(e) = std::fs::write(path, &j) {
-        eprintln!(
-            "warning: failed to write result to {}: {}",
-            path.display(),
-            e
-        );
-    }
-}
-
-#[cfg(feature = "cli")]
-fn write_artifacts(dir: &std::path::Path, result: &CommandResult) {
-    let art_dir = dir.join(&result.run_id);
-    if let Err(e) = std::fs::create_dir_all(&art_dir) {
-        eprintln!(
-            "warning: failed to create artifacts dir {}: {}",
-            art_dir.display(),
-            e
-        );
-        return;
-    }
-
-    // result.json
-    let result_path = art_dir.join("result.json");
-    let j = serde_json::to_string_pretty(result).unwrap_or_default();
-    let _ = std::fs::write(&result_path, &j);
-
-    // events.jsonl (single event for non-scenario)
-    let events_path = art_dir.join("events.jsonl");
-    if let Ok(line) = serde_json::to_string(result) {
-        let _ = std::fs::write(&events_path, format!("{}\n", line));
     }
 }

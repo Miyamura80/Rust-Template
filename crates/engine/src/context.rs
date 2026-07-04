@@ -23,9 +23,15 @@ use std::time::Instant;
 pub struct AppContext {
     fs: Box<dyn FilesystemOps>,
     network: Box<dyn NetworkOps>,
-    /// Target host for network probe (configurable).
+    /// Target URL the `network` probe hits. Defaults to
+    /// [`DEFAULT_NETWORK_PROBE_HOST`], overridable via the
+    /// `APP__NETWORK_PROBE_HOST` env var or by setting this field directly
+    /// (e.g. to an internal health endpoint you control).
     pub network_probe_host: String,
 }
+
+/// Default target for the `network` probe when no override is set.
+pub const DEFAULT_NETWORK_PROBE_HOST: &str = "https://httpbin.org/get";
 
 impl Default for AppContext {
     /// Wire the real platform capabilities. Use [`AppContext::new`] to inject
@@ -40,10 +46,14 @@ impl AppContext {
     /// injecting stubs (tests, offline runs); [`AppContext::default`] wires the
     /// real platform ones.
     pub fn new(fs: Box<dyn FilesystemOps>, network: Box<dyn NetworkOps>) -> Self {
+        let network_probe_host = std::env::var("APP__NETWORK_PROBE_HOST")
+            .ok()
+            .filter(|v| !v.trim().is_empty())
+            .unwrap_or_else(|| DEFAULT_NETWORK_PROBE_HOST.to_string());
         Self {
             fs,
             network,
-            network_probe_host: "https://httpbin.org/get".to_string(),
+            network_probe_host,
         }
     }
 
