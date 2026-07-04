@@ -12,7 +12,7 @@ hooks = [
 [[repos]]
 repo = "local"
 hooks = [
-  { id = "biome-check", name = "Biome Check", entry = "bunx @biomejs/biome check --apply .", language = "system", pass_filenames = false, always_run = true },
+  { id = "biome-check", name = "Biome Check", entry = "bunx @biomejs/biome check --write .", language = "system", pass_filenames = false, always_run = true },
   { id = "cargo-fmt", name = "Cargo Format", entry = "cargo fmt --all", language = "system", pass_filenames = false, always_run = true },
   { id = "cargo-clippy", name = "Cargo Clippy", entry = "cargo clippy --workspace --all-targets -- -D warnings", language = "system", pass_filenames = false, always_run = true },
 ]
