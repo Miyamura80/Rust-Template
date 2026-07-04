@@ -3,7 +3,7 @@
   "configVersion": 0,
   "workspaces": {
     "": {
-      "name": "tauri-app",
+      "name": "rust-template",
       "dependencies": {
         "react": "^19.2.4",
         "react-dom": "^19.2.4",

@@ -23,27 +23,48 @@ use std::time::Instant;
 pub struct AppContext {
     fs: Box<dyn FilesystemOps>,
     network: Box<dyn NetworkOps>,
-    /// Target host for network probe (configurable).
+    /// Target URL the `network` probe hits. Defaults to
+    /// [`DEFAULT_NETWORK_PROBE_HOST`], overridable via the
+    /// `APP__NETWORK_PROBE_HOST` env var or by setting this field directly
+    /// (e.g. to an internal health endpoint you control).
     pub network_probe_host: String,
 }
+
+/// Default target for the `network` probe when no override is set.
+pub const DEFAULT_NETWORK_PROBE_HOST: &str = "https://httpbin.org/get";
 
 impl Default for AppContext {
     /// Wire the real platform capabilities. Use [`AppContext::new`] to inject
     /// stub implementations instead.
+    ///
+    /// This is the production path, so it also honors the
+    /// `APP__NETWORK_PROBE_HOST` env override for the `network` probe target.
+    /// [`AppContext::new`] deliberately does **not** read env, so stub-injecting
+    /// tests stay deterministic regardless of ambient environment.
     fn default() -> Self {
-        Self::new(Box::new(StdFilesystem), Box::new(ReqwestNetwork))
+        let mut ctx = Self::new(Box::new(StdFilesystem), Box::new(ReqwestNetwork));
+        if let Some(host) = std::env::var("APP__NETWORK_PROBE_HOST")
+            .ok()
+            .filter(|v| !v.trim().is_empty())
+        {
+            ctx.network_probe_host = host;
+        }
+        ctx
     }
 }
 
 impl AppContext {
     /// Build a context over caller-supplied capabilities. This is the seam for
     /// injecting stubs (tests, offline runs); [`AppContext::default`] wires the
-    /// real platform ones.
+    /// real platform ones. Pure: reads no environment, so tests are
+    /// deterministic. `network_probe_host` starts at
+    /// [`DEFAULT_NETWORK_PROBE_HOST`] and can be overridden by setting the field
+    /// directly.
     pub fn new(fs: Box<dyn FilesystemOps>, network: Box<dyn NetworkOps>) -> Self {
         Self {
             fs,
             network,
-            network_probe_host: "https://httpbin.org/get".to_string(),
+            network_probe_host: DEFAULT_NETWORK_PROBE_HOST.to_string(),
         }
     }
 
