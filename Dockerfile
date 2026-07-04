@@ -7,6 +7,9 @@ WORKDIR /app
 # Cache dependencies first for faster rebuilds.
 COPY Cargo.toml Cargo.lock ./
 COPY crates ./crates
+# `appctl new` embeds this template via include_str!; the (ungated) scaffold
+# module needs it present at compile time, so it must be in the build context.
+COPY templates ./templates
 RUN cargo build --locked --release -p appctl
 
 # ---- Runtime ----------------------------------------------------------------
