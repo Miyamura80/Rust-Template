@@ -26,21 +26,19 @@ pub(crate) async fn cmd_doctor(json: bool, out: Option<PathBuf>) {
 fn parse_timeout(s: &str) -> Result<Duration, String> {
     let s = s.trim();
     let invalid = || format!("invalid timeout '{s}' (use e.g. '30s', '500ms', '2m')");
+    // `try_from_secs_f64` (not `from_secs_f64`) so a negative, non-finite, or
+    // overflowing value yields an `Err` rather than panicking the process.
     if let Some(ms) = s.strip_suffix("ms") {
         ms.trim()
             .parse::<u64>()
             .map(Duration::from_millis)
             .map_err(|_| invalid())
     } else if let Some(sec) = s.strip_suffix('s') {
-        sec.trim()
-            .parse::<f64>()
-            .map(Duration::from_secs_f64)
-            .map_err(|_| invalid())
+        let v: f64 = sec.trim().parse().map_err(|_| invalid())?;
+        Duration::try_from_secs_f64(v).map_err(|_| invalid())
     } else if let Some(min) = s.strip_suffix('m') {
-        min.trim()
-            .parse::<f64>()
-            .map(|v| Duration::from_secs_f64(v * 60.0))
-            .map_err(|_| invalid())
+        let v: f64 = min.trim().parse().map_err(|_| invalid())?;
+        Duration::try_from_secs_f64(v * 60.0).map_err(|_| invalid())
     } else {
         s.parse::<u64>()
             .map(Duration::from_secs)
@@ -86,8 +84,9 @@ pub(crate) async fn cmd_call(
     };
 
     let mut cx = Ctx::new(ctx);
+    let started = Instant::now();
     if let Some(dur) = timeout_dur {
-        cx = cx.with_deadline(Instant::now() + dur);
+        cx = cx.with_deadline(started + dur);
     }
     let run_id = cx.request_id.clone();
 
@@ -98,7 +97,7 @@ pub(crate) async fn cmd_call(
                 "call",
                 cmd,
                 &run_id,
-                dur.as_millis() as u64,
+                started.elapsed().as_millis() as u64,
                 ErrorCode::Timeout,
                 format!(
                     "command '{cmd}' timed out after {}",
@@ -400,5 +399,16 @@ mod tests {
         assert!(parse_timeout("").is_err());
         assert!(parse_timeout("s").is_err());
         assert!(parse_timeout("12x").is_err());
+    }
+
+    #[test]
+    fn parse_timeout_rejects_negative_and_nonfinite() {
+        // These parse as valid f64 but must NOT reach Duration::from_secs_f64,
+        // which panics on negative / non-finite / overflowing input.
+        assert!(parse_timeout("-5s").is_err());
+        assert!(parse_timeout("-1m").is_err());
+        assert!(parse_timeout("NaNs").is_err());
+        assert!(parse_timeout("infs").is_err());
+        assert!(parse_timeout("1e400s").is_err()); // parses to f64::INFINITY
     }
 }
