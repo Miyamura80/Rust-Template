@@ -19,14 +19,18 @@ import {
 	readdirSync,
 	readFileSync,
 	readlinkSync,
+	realpathSync,
 	symlinkSync,
 	unlinkSync,
 	writeFileSync,
 } from "node:fs";
-import { dirname, join, relative, resolve } from "node:path";
+import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+// Canonical repo root, used to prove that no path component (including a
+// symlinked parent directory) redirects a generated-TOML write outside the tree.
+const REPO_REAL = realpathSync(REPO);
 const SHARED_SKILLS = join(REPO, ".agents", "skills");
 const CLAUDE_SKILLS = join(REPO, ".claude", "skills");
 const CLAUDE_AGENTS = join(REPO, ".claude", "agents");
@@ -98,6 +102,43 @@ function assertNotSymlink(path: string): void {
 			`ERROR: ${rel(path)} is a symlink; refusing to read/write generated TOML through it. ` +
 				`Remove the symlink and re-run.`,
 		);
+	}
+}
+
+/**
+ * Refuse to operate under a directory whose path escapes the repo through a
+ * symlinked component. The final-path `assertNotSymlink` check only inspects the
+ * last path element, so a symlinked PARENT (e.g. `.codex` or `.codex/agents`
+ * pointing outside the tree) could still redirect a write out of the repo. Walk
+ * every existing component from the repo root down to `dir`; if any is a symlink
+ * whose real target lands outside the repo, abort. Absent components are fine -
+ * `mkdirSync` will create ordinary directories for them.
+ */
+function assertDirInsideRepo(dir: string): void {
+	const relPath = relative(REPO, dir);
+	if (relPath === "") return;
+	if (relPath.startsWith("..") || resolve(REPO, relPath) !== dir) {
+		die(`ERROR: ${dir} is outside the repo root; refusing to continue.`);
+	}
+	let current = REPO;
+	for (const part of relPath.split(sep).filter(Boolean)) {
+		current = join(current, part);
+		let st: ReturnType<typeof lstatSync>;
+		try {
+			st = lstatSync(current);
+		} catch {
+			return; // component absent - mkdirSync will create a real directory
+		}
+		if (st.isSymbolicLink()) {
+			const real = realpathSync(current);
+			if (real !== REPO_REAL && !real.startsWith(REPO_REAL + sep)) {
+				die(
+					`ERROR: ${rel(current)} is a symlink escaping the repo root ` +
+						`(resolves to ${real}); refusing to read/write generated TOML ` +
+						`beneath it. Remove the symlink and re-run.`,
+				);
+			}
+		}
 	}
 }
 
@@ -373,6 +414,9 @@ function syncSkillSymlinks(): string[] {
 
 function syncAgents(): string[] {
 	const changes: string[] = [];
+	// Guard against a symlinked parent dir redirecting TOML writes out of the
+	// repo before we create/populate `.codex/agents/`.
+	assertDirInsideRepo(CODEX_AGENTS);
 	mkdirSync(CODEX_AGENTS, { recursive: true });
 	mkdirSync(CLAUDE_AGENTS, { recursive: true });
 
