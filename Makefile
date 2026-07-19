@@ -194,6 +194,10 @@ file_len_check: ## Check TS/RS files don't exceed max line count
 	@bun run scripts/check_file_length.ts
 	@echo "$(GREEN)✅ File length check completed.$(RESET)"
 
+.PHONY: sync-agent-config
+sync-agent-config: ## Sync Claude <-> Codex skills & subagents (regenerates symlinks and .codex/agents/*.toml)
+	@bun run scripts/sync_agent_config.ts
+
 ci: fmt lint knip audit link-check test file_len_check ## Run all CI checks
 	@echo "$(GREEN)✅ CI checks completed.$(RESET)"
 

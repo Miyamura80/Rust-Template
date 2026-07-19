@@ -17,6 +17,18 @@ hooks = [
   { id = "cargo-clippy", name = "Cargo Clippy", entry = "cargo clippy --workspace --all-targets -- -D warnings", language = "system", pass_filenames = false, always_run = true },
 ]
 
+# ── Claude ↔ Codex skill & subagent sync ──────────────────────────
+[[repos]]
+repo = "local"
+
+[[repos.hooks]]
+id = "sync-agent-config"
+name = "sync Claude ↔ Codex skills & subagents; fail if drift was fixed"
+language = "system"
+entry = "bun run scripts/sync_agent_config.ts --check"
+pass_filenames = false
+always_run = true
+
 # ── Source-size guardrails (mirror GitHub Actions) ────────────────
 [[repos]]
 repo = "local"

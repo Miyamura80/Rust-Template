@@ -72,6 +72,16 @@ Structure as: `init()` → `continue(id)` → `cleanup(id)`
 
 - Folder-size CI failure → spawn subagent `.claude/agents/folder-refactor-advisor.md`.
 
+## Dual-tool config (Claude + Codex)
+
+Skills and subagents are shared with Codex CLI. Shared skills live in
+`.agents/skills/<name>/SKILL.md` (symlinked into `.claude/skills/`); subagents
+in `.claude/agents/<name>.md` are the source of truth and generate
+`.codex/agents/<name>.toml`. After editing anything under `.claude/skills/`,
+`.claude/agents/`, `.agents/skills/`, or `.codex/agents/`, run
+`make sync-agent-config` (prek enforces zero drift). See the `manage-agent-config`
+skill and `.claude/rules/codex-claude-sync.md`.
+
 ## Git Workflow
 - **Protected Branch**: `main` is protected. Do not push directly to `main`. Use PRs.
 - **Merge Strategy**: Squash and merge.
