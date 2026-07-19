@@ -3,17 +3,17 @@ name: manage-agent-config
 description: Use whenever creating, editing, renaming, or deleting any file under .claude/skills/, .claude/agents/, .agents/skills/, or .codex/agents/. Teaches the dual-tool Claude/Codex layout and reminds to run `make sync-agent-config`.
 ---
 
-# Managing Claude ↔ Codex skills and subagents in this repo
+# Managing Claude <-> Codex skills and subagents in this repo
 
-This repo is dual-tool. Before you create or edit anything under `.claude/`, `.agents/`, or `.codex/`, read this and the detailed rule at `.claude/rules/codex-claude-sync.md`.
+This repo is dual-tool: both Claude Code and Codex CLI are expected to work. Before you create or edit anything under `.claude/`, `.agents/`, or `.codex/`, read this and the detailed rule at `.claude/rules/codex-claude-sync.md`.
 
 ## Decision tree
 
 **Creating a new skill?**
 
-1. Does it need Claude-only features (`allowed-tools`, `$ARGUMENTS`, `` !`shell` `` preprocessing, `${CLAUDE_SKILL_DIR}`)?
-   - **Yes** → `.claude/skills/<name>/SKILL.md` (real directory, no symlink). Claude-only.
-   - **No** → `.agents/skills/<name>/SKILL.md`. Shared; `make sync-agent-config` creates the `.claude/skills/<name>` symlink.
+1. Does it need Claude-only features (`allowed-tools`, `$ARGUMENTS`, `` !`shell` `` preprocessing, `${CLAUDE_SKILL_DIR}`, `disable-model-invocation`)?
+   - **Yes** -> `.claude/skills/<name>/SKILL.md` (real directory, no symlink). Claude-only. Add a `<!-- claude-only -->` comment at the top of the body.
+   - **No** -> `.agents/skills/<name>/SKILL.md`. Shared; `make sync-agent-config` creates the `.claude/skills/<name>` symlink.
 
 **Creating a new subagent?**
 
@@ -30,17 +30,17 @@ This repo is dual-tool. Before you create or edit anything under `.claude/`, `.a
 
 `.agents/skills/<name>/SKILL.md` must only use:
 
-- `name` (required, lowercase-hyphens, ≤64 chars)
-- `description` (required, ≤250 chars - Codex and Claude use this for implicit matching)
+- `name` (required, lowercase-hyphens, <=64 chars)
+- `description` (required, <=250 chars - Codex and Claude use this for implicit matching)
 - Plain markdown body
 
 Do **not** use any of these in a shared skill:
 
 - `allowed-tools`, `disable-model-invocation`, `user-invocable`, `context`, `agent`, `model`, `effort`, `hooks`, `paths`, `shell`, `argument-hint`
-- `$ARGUMENTS`, `$1`…`$N`, `${CLAUDE_SKILL_DIR}`, `${CLAUDE_SESSION_ID}` substitutions
+- `$ARGUMENTS`, `$1`...`$N`, `${CLAUDE_SKILL_DIR}`, `${CLAUDE_SESSION_ID}` substitutions
 - `` !`cmd` `` or ```` ```! ```` shell preprocessing blocks
 
-All of those are Claude-only. In Codex they pass through literally and confuse the model. If you need them, make the skill Claude-only (see decision tree above).
+All of those are Claude-only. In Codex they pass through literally and confuse the model. If you need them, make the skill Claude-only (see decision tree above). The sync script validates shared skills and fails the commit if a forbidden key or pattern appears.
 
 ## Subagent format notes
 
