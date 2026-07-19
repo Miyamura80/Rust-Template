@@ -26,8 +26,11 @@ const FORBIDDEN_CRATES: Array<{ dir: string; pkg: string }> = [
 	{ dir: "cli", pkg: "appctl" },
 ];
 
+// Also match target-conditional tables, e.g.
+// `[target.'cfg(unix)'.dependencies]` / `[target.x86_64-pc-windows-msvc.dev-dependencies]`,
+// so a forbidden dep hidden under a platform section isn't silently missed.
 const DEP_TABLE_RE =
-	/^\[(dependencies|dev-dependencies|build-dependencies)\]\s*$/;
+	/^\[(?:target\..*\.)?(dependencies|dev-dependencies|build-dependencies)\]\s*$/;
 const TABLE_RE = /^\[/;
 // A dependency line: `key = ...` or `key.feature = ...`. Captures the crate key.
 const DEP_KEY_RE = /^([A-Za-z0-9_-]+)(\s*\.\s*[A-Za-z0-9_-]+)?\s*=/;
