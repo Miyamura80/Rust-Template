@@ -354,7 +354,22 @@ function validateAllSharedSkills(names: string[]): void {
 	}
 }
 
-function materializeSymlink(name: string): string | null {
+// Create `dir` when absent; in check mode record the intent instead of writing.
+// Returns whether the dir already existed (callers gate reads on the result).
+function ensureDir(dir: string, check: boolean, changes: string[]): boolean {
+	const existed = existsSync(dir);
+	if (!existed) {
+		if (check) changes.push(`create ${rel(dir)}`);
+		else mkdirSync(dir, { recursive: true });
+	}
+	return existed;
+}
+
+// When `check` is true this performs NO filesystem mutation: it computes the
+// change that *would* be made and returns its description (the read-only
+// collision assert still runs). When false it actually creates/repoints the
+// symlink.
+function materializeSymlink(name: string, check: boolean): string | null {
 	const link = join(CLAUDE_SKILLS, name);
 	const target = join("..", "..", ".agents", "skills", name);
 	let exists = false;
@@ -369,31 +384,35 @@ function materializeSymlink(name: string): string | null {
 	if (isSymlink) {
 		const current = readlinkSync(link);
 		if (current === target) return null;
-		unlinkSync(link);
+		if (!check) unlinkSync(link);
 	} else if (exists) {
 		die(
 			`ERROR: name collision - .claude/skills/${name} is a real directory (Claude-only skill) ` +
 				`but .agents/skills/${name} also exists (shared skill). Resolve by removing one of them.`,
 		);
 	}
-	symlinkSync(target, link);
+	if (!check) symlinkSync(target, link);
 	return `symlinked ${rel(link)}`;
 }
 
-function syncSkillSymlinks(): string[] {
+function syncSkillSymlinks(check: boolean): string[] {
 	const changes: string[] = [];
-	const sharedExisted = existsSync(SHARED_SKILLS);
-	if (!sharedExisted) mkdirSync(SHARED_SKILLS, { recursive: true });
-	mkdirSync(CLAUDE_SKILLS, { recursive: true });
+	const sharedExisted = ensureDir(SHARED_SKILLS, check, changes);
+	const claudeSkillsExisted = ensureDir(CLAUDE_SKILLS, check, changes);
 
-	const wanted = readdirSync(SHARED_SKILLS, { withFileTypes: true })
-		.filter((e) => e.isDirectory())
-		.map((e) => e.name);
+	// In check mode the shared dir may not exist yet (we didn't create it), so
+	// treat a missing dir as empty rather than reading through it.
+	const wanted =
+		sharedExisted || !check
+			? readdirSync(SHARED_SKILLS, { withFileTypes: true })
+					.filter((e) => e.isDirectory())
+					.map((e) => e.name)
+			: [];
 	const wantedSet = new Set(wanted);
 	validateAllSharedSkills(wanted);
 
 	for (const name of wanted) {
-		const change = materializeSymlink(name);
+		const change = materializeSymlink(name, check);
 		if (change) changes.push(change);
 	}
 
@@ -402,28 +421,33 @@ function syncSkillSymlinks(): string[] {
 	// Claude symlink. User-created symlinks elsewhere are unaffected either way.
 	if (!sharedExisted && wanted.length === 0) return changes;
 
-	for (const entry of readdirSync(CLAUDE_SKILLS, { withFileTypes: true })) {
-		if (entry.isSymbolicLink() && !wantedSet.has(entry.name)) {
-			const p = join(CLAUDE_SKILLS, entry.name);
-			unlinkSync(p);
-			changes.push(`pruned dangling ${rel(p)}`);
+	if (claudeSkillsExisted || !check) {
+		for (const entry of readdirSync(CLAUDE_SKILLS, { withFileTypes: true })) {
+			if (entry.isSymbolicLink() && !wantedSet.has(entry.name)) {
+				const p = join(CLAUDE_SKILLS, entry.name);
+				if (!check) unlinkSync(p);
+				changes.push(`pruned dangling ${rel(p)}`);
+			}
 		}
 	}
 	return changes;
 }
 
-function syncAgents(): string[] {
+function syncAgents(check: boolean): string[] {
 	const changes: string[] = [];
 	// Guard against a symlinked parent dir redirecting TOML writes out of the
-	// repo before we create/populate `.codex/agents/`.
+	// repo before we create/populate `.codex/agents/`. Read-only, safe in check mode.
 	assertDirInsideRepo(CODEX_AGENTS);
-	mkdirSync(CODEX_AGENTS, { recursive: true });
-	mkdirSync(CLAUDE_AGENTS, { recursive: true });
+	const codexExisted = ensureDir(CODEX_AGENTS, check, changes);
+	const claudeAgentsExisted = ensureDir(CLAUDE_AGENTS, check, changes);
 
 	const wanted = new Set<string>();
-	const mdFiles = readdirSync(CLAUDE_AGENTS, { withFileTypes: true })
-		.filter((e) => e.isFile() && e.name.endsWith(".md"))
-		.map((e) => e.name);
+	const mdFiles =
+		claudeAgentsExisted || !check
+			? readdirSync(CLAUDE_AGENTS, { withFileTypes: true })
+					.filter((e) => e.isFile() && e.name.endsWith(".md"))
+					.map((e) => e.name)
+			: [];
 	for (const mdName of mdFiles) {
 		const mdPath = join(CLAUDE_AGENTS, mdName);
 		const { meta, body } = parseMd(mdPath);
@@ -435,21 +459,23 @@ function syncAgents(): string[] {
 			? readFileSync(tomlPath, "utf-8")
 			: null;
 		if (current !== fresh) {
-			writeFileSync(tomlPath, fresh, "utf-8");
+			if (!check) writeFileSync(tomlPath, fresh, "utf-8");
 			changes.push(`wrote ${rel(tomlPath)}`);
 		}
 		wanted.add(tomlName);
 	}
 
-	for (const entry of readdirSync(CODEX_AGENTS, { withFileTypes: true })) {
-		if (
-			entry.isFile() &&
-			entry.name.endsWith(".toml") &&
-			!wanted.has(entry.name)
-		) {
-			const p = join(CODEX_AGENTS, entry.name);
-			unlinkSync(p);
-			changes.push(`pruned orphan ${rel(p)}`);
+	if (codexExisted || !check) {
+		for (const entry of readdirSync(CODEX_AGENTS, { withFileTypes: true })) {
+			if (
+				entry.isFile() &&
+				entry.name.endsWith(".toml") &&
+				!wanted.has(entry.name)
+			) {
+				const p = join(CODEX_AGENTS, entry.name);
+				if (!check) unlinkSync(p);
+				changes.push(`pruned orphan ${rel(p)}`);
+			}
 		}
 	}
 	return changes;
@@ -457,11 +483,13 @@ function syncAgents(): string[] {
 
 function main(): number {
 	const check = process.argv.includes("--check");
-	const changes = [...syncSkillSymlinks(), ...syncAgents()];
+	// In check mode nothing is written: syncSkillSymlinks/syncAgents compute the
+	// would-be changes and mutate nothing, so the drift gate is a read-only run.
+	const changes = [...syncSkillSymlinks(check), ...syncAgents(check)];
 	for (const c of changes) console.log(c);
 	if (check && changes.length > 0) {
 		console.error(
-			"sync-agent-config introduced changes; stage them and commit again.",
+			"sync-agent-config would introduce changes; run `make sync-agent-config`, stage them, and commit again.",
 		);
 		return 1;
 	}
