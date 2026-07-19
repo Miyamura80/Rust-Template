@@ -4,8 +4,8 @@
 
 1.  **Prerequisites**:
     *   Rust >= 1.75
-    *   Bun >= 1.0 (needed for `make ci` tooling — Biome, Knip, audit,
-        file_len_check — as well as the optional frontend / docs site)
+    *   Bun >= 1.0 (needed for `make ci` tooling - Biome, Knip, audit,
+        file_len_check - as well as the optional frontend / docs site)
 
 2.  **Setup**:
     ```bash

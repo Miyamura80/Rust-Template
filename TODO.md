@@ -28,7 +28,7 @@
 - [ ] Result upload / "push mode": POST `result.json` + artifact zip to a server
 - [ ] HTML report generation from artifact directories
 
-### Emit Events (Desktop Simulation) — DROPPED
+### Emit Events (Desktop Simulation) - DROPPED
 
 Not applicable to a server template: PRD §8b removed the desktop `emit` command
 (always Unsupported on a server). Kept here only as historical context.

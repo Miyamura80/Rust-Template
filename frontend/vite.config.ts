@@ -16,7 +16,7 @@ const apiProxyTarget = process.env.VITE_API_PROXY || "http://127.0.0.1:8080";
 // https://vite.dev/config/
 export default defineConfig({
 	plugins: [react()],
-	// Don't clear the terminal — keeps `appctl serve` logs visible alongside Vite.
+	// Don't clear the terminal - keeps `appctl serve` logs visible alongside Vite.
 	clearScreen: false,
 	server: {
 		port: 1420,

@@ -3,11 +3,11 @@ This file provides guidance to AI agents working with code in this repository.
 ## Project Overview
 
 A Rust application-server template. Business logic is written **once** as a typed
-async `Command` in the `engine` crate and exposed over multiple transports — CLI,
-HTTP API, and (later) MCP — through the `appctl` binary. The `engine` core has no
+async `Command` in the `engine` crate and exposed over multiple transports - CLI,
+HTTP API, and (later) MCP - through the `appctl` binary. The `engine` core has no
 transport dependency; transports live in `crates/cli` behind cargo features. An
 optional React/Vite frontend (`frontend/`) talks to the HTTP API over `fetch`.
-**Note:** migrated away from Tauri/desktop and from Python — Rust for backend,
+**Note:** migrated away from Tauri/desktop and from Python - Rust for backend,
 Node/Bun for frontend/scripts.
 **Before any other work in this repo, enable prek:** `bun add -g prek && prek install`. Hooks are defined in `prek.toml`.
 
@@ -25,13 +25,13 @@ make dev                # Optional frontend: Vite dev server, /api → appctl se
 
 ## Architecture
 
-- **crates/engine/** — typed async `Command` registry with `inventory`
+- **crates/engine/** - typed async `Command` registry with `inventory`
   self-registration; per-request `Ctx`; capability traits. No transport deps.
-- **crates/cli/** — the `appctl` binary; `cli` and `http-api` are cargo features
+- **crates/cli/** - the `appctl` binary; `cli` and `http-api` are cargo features
   (both default), so `appctl init` can prune a surface and still compile.
-- **crates/config/** — crate `app-config`; `AppConfig` (secrets) vs sanitized
+- **crates/config/** - crate `app-config`; `AppConfig` (secrets) vs sanitized
   `FrontendConfig` (served over HTTP). The sanitizer is a security boundary.
-- **frontend/** — optional React/Vite app, `fetch`-based `/api/v1` client.
+- **frontend/** - optional React/Vite app, `fetch`-based `/api/v1` client.
 
 > **Making backend changes?** Use the `update-backend` skill for architecture details, command patterns, trait implementations, config access, and `appctl` testing workflows.
 
@@ -88,7 +88,7 @@ Operational runbooks live in `docs/runbooks/`. After resolving a difficult issue
 
 Docs under `docs/content/` are auto-translated by the **Jules Translation Sync**
 workflow (`.github/workflows/jules-sync-translations.yml`). Do NOT manually
-translate doc files — edit the English source and the workflow will update all
+translate doc files - edit the English source and the workflow will update all
 locales (`zh`, `es`, `ja`).
 
 See [`docs/translation-guide.md`](docs/translation-guide.md) for the full

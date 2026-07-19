@@ -29,12 +29,12 @@ const MOCK_RESPONSES = [
 	"That's an interesting question. Based on what you've shared, I think the best approach would be to start small and iterate from there.",
 	"Great point! One thing to consider is how this fits into the broader context of your project. Have you thought about edge cases?",
 	"I understand what you're going for. Here's how I'd think through it: break the problem into smaller pieces, tackle each one, then integrate.",
-	"This is a classic challenge in software development. The key insight is that the simple solution is usually the right one — resist over-engineering.",
+	"This is a classic challenge in software development. The key insight is that the simple solution is usually the right one - resist over-engineering.",
 	"Absolutely. The pattern you're describing is well-established. I'd recommend looking into how similar systems handle this at scale.",
-	"Good thinking. To build on that — the tricky part is often not the implementation itself, but deciding the right interface for it.",
+	"Good thinking. To build on that - the tricky part is often not the implementation itself, but deciding the right interface for it.",
 	"That makes sense given the constraints you're working within. My suggestion would be to prototype it first before committing to the design.",
-	"Interesting! There are a few ways to approach this. The trade-offs mostly come down to simplicity vs. flexibility — depends on your priorities.",
-	"I see what you mean. One thing that often gets overlooked here is the developer experience — make sure it's easy to test and debug later.",
+	"Interesting! There are a few ways to approach this. The trade-offs mostly come down to simplicity vs. flexibility - depends on your priorities.",
+	"I see what you mean. One thing that often gets overlooked here is the developer experience - make sure it's easy to test and debug later.",
 ];
 
 export function Chat() {
@@ -121,7 +121,7 @@ export function Chat() {
 	const connectivityLabel = {
 		unknown: "Checking API…",
 		online: "API connected",
-		offline: "API offline — run `appctl serve`",
+		offline: "API offline - run `appctl serve`",
 	}[connectivity];
 
 	return (

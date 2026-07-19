@@ -39,6 +39,6 @@ Never move, rename, create, or delete files.
 """
 
 # Claude-only frontmatter (preserved for reference, not used by Codex):
-# tools = 'Read, Glob, Grep, Bash, AskUserQuestion'
-# model = 'sonnet'
-# color = 'yellow'
+# tools = "Read, Glob, Grep, Bash, AskUserQuestion"
+# model = "sonnet"
+# color = "yellow"

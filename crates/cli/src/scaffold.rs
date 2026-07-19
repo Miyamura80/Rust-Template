@@ -1,9 +1,9 @@
-//! `appctl new <name>` — command scaffolding.
+//! `appctl new <name>` - command scaffolding.
 //!
 //! Generates a new engine [`Command`] by substituting into
 //! `templates/command.rs.tpl` and drops it in `crates/engine/src/commands/`.
 //! Because commands self-register via `inventory`, the only wiring needed is the
-//! `mod <name>;` line in `commands/mod.rs`, which this inserts alphabetically —
+//! `mod <name>;` line in `commands/mod.rs`, which this inserts alphabetically -
 //! no hand-editing a registration list.
 //!
 //! Rust has no runtime module discovery, so the `mod` line is unavoidable; the
@@ -69,7 +69,7 @@ fn execute(opts: NewOptions) -> Result<()> {
     let commands_dir = root.join("crates/engine/src/commands");
     if !commands_dir.is_dir() {
         bail!(
-            "commands directory not found at {} — run this from the repo root",
+            "commands directory not found at {} - run this from the repo root",
             commands_dir.display()
         );
     }

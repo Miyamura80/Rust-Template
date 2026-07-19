@@ -389,7 +389,7 @@ mod tests {
 
     #[test]
     fn parse_timeout_ms_takes_precedence_over_s() {
-        // "500ms" ends in 's' too — must be read as milliseconds, not seconds.
+        // "500ms" ends in 's' too - must be read as milliseconds, not seconds.
         assert_eq!(parse_timeout("5000ms"), Ok(Duration::from_millis(5000)));
     }
 

@@ -115,7 +115,7 @@ status codes with a small `{ "error": { "code", "message" } }` problem body.
 
 ### mcp
 
-Stub for the future MCP transport — prints a notice and exits (`EX_UNAVAILABLE`).
+Stub for the future MCP transport - prints a notice and exits (`EX_UNAVAILABLE`).
 See [`docs/mcp.md`](../../docs/mcp.md) for the adapter design.
 
 ## Output Contract

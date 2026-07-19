@@ -16,7 +16,7 @@ pub fn ensure_env(root: &Path, dry_run: bool) -> Result<bool> {
     }
     if !dry_run {
         std::fs::copy(&example, &target)?;
-        // `.env` holds `APP__*` secrets — restrict it to the owner so it isn't
+        // `.env` holds `APP__*` secrets - restrict it to the owner so it isn't
         // world-readable (the copy inherits `.env.example`'s broad perms). If the
         // chmod fails, delete the file so secrets aren't left world-readable.
         #[cfg(unix)]

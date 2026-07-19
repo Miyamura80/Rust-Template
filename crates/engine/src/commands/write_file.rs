@@ -36,7 +36,7 @@ impl Command for WriteFile {
         "Write UTF-8 content to a file, creating parent directories."
     }
 
-    /// Writes to a caller-supplied path with no sandbox — CLI-only so it is not
+    /// Writes to a caller-supplied path with no sandbox - CLI-only so it is not
     /// reachable as an unauthenticated arbitrary-file-write over the HTTP API.
     fn expose(&self) -> Expose {
         Expose::cli_only()

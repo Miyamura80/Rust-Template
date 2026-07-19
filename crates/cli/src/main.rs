@@ -43,7 +43,7 @@ enum Commands {
     /// Scaffold a new engine command from the template.
     New(scaffold::NewArgs),
 
-    /// (stub) Serve the registry over MCP — designed-for, not yet implemented.
+    /// (stub) Serve the registry over MCP - designed-for, not yet implemented.
     Mcp,
 
     /// Collect environment facts and emit an env summary.

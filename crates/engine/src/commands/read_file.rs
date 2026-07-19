@@ -35,7 +35,7 @@ impl Command for ReadFile {
         "Read a file and return its UTF-8 contents."
     }
 
-    /// Reads a caller-supplied path with no sandbox — CLI-only so it is not
+    /// Reads a caller-supplied path with no sandbox - CLI-only so it is not
     /// reachable as an unauthenticated arbitrary-file-read over the HTTP API.
     fn expose(&self) -> Expose {
         Expose::cli_only()

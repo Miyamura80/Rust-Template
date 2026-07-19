@@ -146,7 +146,7 @@ test_flaky: ## Repeat fast tests to detect flaky tests
 ########################################################
 
 ### Code Quality
-.PHONY: fmt lint knip audit link-check ci
+.PHONY: fmt lint knip audit link-check file_len_check import_lint check_ai_writing sync-agent-config ci
 
 fmt: ## Format code with Biome and rustfmt
 	@echo "$(YELLOW)✨ Formatting and linting with Biome...$(RESET)"
@@ -194,7 +194,22 @@ file_len_check: ## Check TS/RS files don't exceed max line count
 	@bun run scripts/check_file_length.ts
 	@echo "$(GREEN)✅ File length check completed.$(RESET)"
 
-ci: fmt lint knip audit link-check test file_len_check ## Run all CI checks
+import_lint: ## Enforce crate boundaries (engine core must not depend on transport crates)
+	@echo "$(YELLOW)🔍 Checking crate import boundaries...$(RESET)"
+	@bun run scripts/check_import_boundaries.ts
+	@echo "$(GREEN)✅ Crate boundary check completed.$(RESET)"
+
+check_ai_writing: ## Check for AI-writing tells (em dashes)
+	@echo "$(YELLOW)🔍 Checking AI writing patterns...$(RESET)"
+	@bun run scripts/check_ai_writing.ts
+	@echo "$(GREEN)✅ AI writing check completed.$(RESET)"
+
+sync-agent-config: ## Sync Claude <-> Codex skills, subagents & AGENTS.md mirrors
+	@echo "$(YELLOW)🔁 Syncing Claude <-> Codex agent config...$(RESET)"
+	@bun run scripts/sync_agent_config.ts
+	@echo "$(GREEN)✅ Agent config synced.$(RESET)"
+
+ci: fmt lint knip audit link-check test file_len_check import_lint check_ai_writing ## Run all CI checks
 	@echo "$(GREEN)✅ CI checks completed.$(RESET)"
 
 
