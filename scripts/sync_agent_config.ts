@@ -1,15 +1,21 @@
 #!/usr/bin/env bun
 /**
- * Sync Claude <-> Codex skills and subagents.
+ * Sync Claude <-> Codex skills, subagents, and root agent docs.
  *
  * - Symlinks `.claude/skills/<name>` -> `../../.agents/skills/<name>` for every
  *   directory under `.agents/skills/`.
  * - Regenerates `.codex/agents/<name>.toml` from each `.claude/agents/<name>.md`.
+ * - Mirrors every `CLAUDE.md` to a sibling `AGENTS.md` symlink (Codex reads
+ *   `AGENTS.md`; Claude reads `CLAUDE.md`).
  * - Auto-prunes dangling symlinks and orphaned TOMLs silently.
  *
  * Self-contained: parses the small, single-line-scalar YAML frontmatter used by
  * skills and subagents with a minimal parser, so the script runs with zero
  * installed dependencies (`bun run scripts/sync_agent_config.ts`).
+ *
+ * Pass `--check` to fail (exit 1) if anything is out of date instead of fixing
+ * it. In check mode the script performs NO filesystem mutation -- used by the
+ * prek hook and CI.
  */
 
 import {
@@ -73,6 +79,18 @@ const SHARED_SKILL_FORBIDDEN_BODY_PATTERNS: [RegExp, string][] = [
 const SHARED_SKILL_RAW_BODY_PATTERNS: [RegExp, string][] = [
 	[/^```!\s*$/m, "```! shell preprocessing block"],
 ];
+
+// Directories skipped when walking the tree for CLAUDE.md files.
+const MIRROR_SKIP_DIRS = new Set([
+	".git",
+	"node_modules",
+	"target",
+	"dist",
+	"out",
+	"build",
+	".next",
+	".cache",
+]);
 
 type Frontmatter = Record<string, string>;
 
@@ -481,11 +499,58 @@ function syncAgents(check: boolean): string[] {
 	return changes;
 }
 
+function findClaudeMds(dir: string, acc: string[]): void {
+	for (const entry of readdirSync(dir, { withFileTypes: true })) {
+		if (entry.isDirectory()) {
+			if (MIRROR_SKIP_DIRS.has(entry.name)) continue;
+			findClaudeMds(join(dir, entry.name), acc);
+		} else if (entry.isFile() && entry.name === "CLAUDE.md") {
+			acc.push(join(dir, entry.name));
+		}
+	}
+}
+
+// Every directory holding a CLAUDE.md gets a sibling AGENTS.md symlink so Codex
+// (which reads AGENTS.md) sees the same doc Claude reads. In check mode this
+// performs NO filesystem mutation -- it records the would-be change and returns.
+function mirrorAgentsMd(check: boolean): string[] {
+	const changes: string[] = [];
+	const claudeMds: string[] = [];
+	findClaudeMds(REPO, claudeMds);
+
+	for (const claudeMd of claudeMds) {
+		const agentsMd = join(dirname(claudeMd), "AGENTS.md");
+		let isSymlink = false;
+		let exists = false;
+		try {
+			const st = lstatSync(agentsMd);
+			exists = true;
+			isSymlink = st.isSymbolicLink();
+		} catch {
+			// not present
+		}
+		if (isSymlink) {
+			if (readlinkSync(agentsMd) === "CLAUDE.md") continue;
+			if (!check) unlinkSync(agentsMd);
+		} else if (exists) {
+			// A drifted hand-written AGENTS.md -- replace it with the symlink.
+			if (!check) unlinkSync(agentsMd);
+		}
+		if (!check) symlinkSync("CLAUDE.md", agentsMd);
+		changes.push(`symlinked ${rel(agentsMd)} -> CLAUDE.md`);
+	}
+	return changes;
+}
+
 function main(): number {
 	const check = process.argv.includes("--check");
-	// In check mode nothing is written: syncSkillSymlinks/syncAgents compute the
-	// would-be changes and mutate nothing, so the drift gate is a read-only run.
-	const changes = [...syncSkillSymlinks(check), ...syncAgents(check)];
+	// In check mode nothing is written: the sync functions compute the would-be
+	// changes and mutate nothing, so the drift gate is a read-only run.
+	const changes = [
+		...syncSkillSymlinks(check),
+		...syncAgents(check),
+		...mirrorAgentsMd(check),
+	];
 	for (const c of changes) console.log(c);
 	if (check && changes.length > 0) {
 		console.error(

@@ -209,7 +209,7 @@ async fn run_banner(
             match image::open(p) {
                 Ok(img) => Some(img.to_rgba8()),
                 Err(e) if !explicit_icon => {
-                    // Auto-detected path failed — degrade gracefully
+                    // Auto-detected path failed - degrade gracefully
                     warn!(
                         "Failed to load auto-detected icon at {}: {e}, continuing without reference",
                         p.display()
@@ -235,7 +235,7 @@ async fn run_banner(
 
     let banner = if let Some(ref icon_img) = icon_image {
         let full_prompt = format!(
-            "{banner_description}. Create a WIDE 16:9 horizontal image where the banner takes up 80% of the screen and the text '{title}' is centered at the top with excellent contrast. {BANNER_STYLE_PROMPT} IMPORTANT: Use the provided icon/logo as the main visual element in the banner — do NOT use a default placeholder icon. Incorporate this exact icon prominently in the composition.",
+            "{banner_description}. Create a WIDE 16:9 horizontal image where the banner takes up 80% of the screen and the text '{title}' is centered at the top with excellent contrast. {BANNER_STYLE_PROMPT} IMPORTANT: Use the provided icon/logo as the main visual element in the banner - do NOT use a default placeholder icon. Incorporate this exact icon prominently in the composition.",
         );
         client
             .generate_image_from_reference(IMAGE_MODEL, &full_prompt, icon_img)

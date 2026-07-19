@@ -51,7 +51,7 @@ against the latest `main` commit.
 | Jules session fails             | Poll step exits with FAILED state           | Check Jules session UI in logs; fix issue and re-run.        |
 | Poll timeout                    | Workflow times out after ~30 min            | Check Jules UI; re-run workflow via `workflow_dispatch`.      |
 | Transient 5xx errors            | Warnings in logs, then success              | Built-in retry with exponential back-off handles these.      |
-| No English changes detected     | Workflow exits early with "nothing to do"   | Expected behaviour — only translation files changed.         |
+| No English changes detected     | Workflow exits early with "nothing to do"   | Expected behaviour - only translation files changed.         |
 
 ## Verifying the Jules source identifier
 
@@ -68,5 +68,5 @@ The Jules prompt instructs Jules to read `docs/translation-guide.md` before
 starting. Edit that file to:
 
 - Add terms that must never be translated.
-- Update the list of supported locales (informational — the workflow uses `SUPPORTED_LANGS`).
+- Update the list of supported locales (informational - the workflow uses `SUPPORTED_LANGS`).
 - Refine translation PR rules.

@@ -1,4 +1,4 @@
-//! `appctl init` — one-time project onboarding.
+//! `appctl init` - one-time project onboarding.
 //!
 //! Turns this template into a real project: renames the template sentinels,
 //! prunes the surfaces you don't want, and seeds `.env`. Everything routes
@@ -148,12 +148,12 @@ fn execute(opts: InitOptions) -> Result<()> {
     println!("{}", plan::render(&config, &root));
 
     if opts.dry_run {
-        println!("Dry run — no files were changed. Re-run without --dry-run to apply.");
+        println!("Dry run - no files were changed. Re-run without --dry-run to apply.");
         return Ok(());
     }
 
     if !opts.yes && !wizard::confirm_apply()? {
-        println!("Aborted — no files were changed.");
+        println!("Aborted - no files were changed.");
         return Ok(());
     }
 

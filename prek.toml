@@ -15,6 +15,8 @@ hooks = [
   { id = "biome-check", name = "Biome Check", entry = "bunx @biomejs/biome check --write .", language = "system", pass_filenames = false, always_run = true },
   { id = "cargo-fmt", name = "Cargo Format", entry = "cargo fmt --all", language = "system", pass_filenames = false, always_run = true },
   { id = "cargo-clippy", name = "Cargo Clippy", entry = "cargo clippy --workspace --all-targets -- -D warnings", language = "system", pass_filenames = false, always_run = true },
+  { id = "ai-writing-check", name = "AI writing check", entry = "bun run scripts/check_ai_writing.ts", language = "system", pass_filenames = false, always_run = true },
+  { id = "import-lint", name = "Crate boundary check", entry = "bun run scripts/check_import_boundaries.ts", language = "system", pass_filenames = false, always_run = true },
 ]
 
 # ── Claude ↔ Codex skill & subagent sync ──────────────────────────

@@ -7,7 +7,7 @@ with a unified CLI & HTTP API interface over a single shared core, plus an
 **optional** Bun/React frontend for visualization. Inspired by
 [`Miyamura80/MCP-Template`](https://github.com/Miyamura80/MCP-Template):
 *write the business logic + its typed I/O contract once*, and **auto-derive the
-API (and, later, MCP) from that contract** — with an MCP transport designed-for
+API (and, later, MCP) from that contract** - with an MCP transport designed-for
 but **not built** in this iteration.
 
 ### How the reference actually works (verified against source)
@@ -24,7 +24,7 @@ distinct mechanisms, and the split is intentional:
   registry and synthesizes a tool whose JSON schema comes from `input_model`.
 - **The CLI is hand-written per command** (`src/cli/commands/*.py`, its own
   `discover_commands()` scan). Each command is a bespoke Typer function with its
-  own flags, `--dry-run`/`--verbose`, interactive fallback, and rendering — it
+  own flags, `--dry-run`/`--verbose`, interactive fallback, and rendering - it
   *imports and calls* the service. The CLI is NOT derived from the registry.
 - A per-service **exclusion set** hides CLI-only services (e.g. `greet`,
   `doctor`, `config_*`) from the MCP tool surface. Transport visibility is
@@ -60,19 +60,19 @@ All Tauri/desktop scaffolding is removed.
 
 ```
         ┌──────────────────────────────────────────────────────────┐
-        │  TRANSPORTS  (crates/cli — one binary, subcommands)        │
+        │  TRANSPORTS  (crates/cli - one binary, subcommands)        │
         │                                                            │
         │   appctl call <cmd> --args '{...}'   one-shot JSON I/O     │
         │   appctl serve --http :8080          axum HTTP API         │
         │   appctl doctor | probe | run-scenario                     │
-        │   appctl mcp                         (LATER — stub)        │
+        │   appctl mcp                         (LATER - stub)        │
         └───────────────┬─────────────────────────┬──────────────────┘
                         │                          │
           optional ─────┘                          │  same registry
           bun/React frontend ──HTTP/fetch──▶ serve  │  + typed contract
                                                     │
         ┌───────────────────────────────────────────▼───────────────┐
-        │  crates/engine  — the service core (no transport deps)      │
+        │  crates/engine  - the service core (no transport deps)      │
         │                                                             │
         │    Command trait:  Input: JsonSchema + Deserialize          │
         │                    Output: JsonSchema + Serialize           │
@@ -84,7 +84,7 @@ All Tauri/desktop scaffolding is removed.
         └───────────────────────────┬─────────────────────────────────┘
                                      │
         ┌────────────────────────────▼────────────────────────────────┐
-        │  crates/config  — AppConfig / FrontendConfig (moved here)     │
+        │  crates/config  - AppConfig / FrontendConfig (moved here)     │
         │                   YAML + APP__ env overrides + sanitizer       │
         └────────────────────────────────────────────────────────────────┘
 ```
@@ -136,7 +136,7 @@ trait Command {
   MCP tool schema all come from a single definition (no drift). Commands needing
   bespoke CLI UX can still hand-write a clap command and call the service.
   - **Implementation note (Phase 2):** the trait bounds `Input` on
-    `DeserializeOwned + JsonSchema + Send` only — it deliberately does **not**
+    `DeserializeOwned + JsonSchema + Send` only - it deliberately does **not**
     require `clap::Args`, so `engine` stays free of any CLI dependency (matching
     §4.1's "CLI is hand-written, not derived from the registry"). Input structs
     add `#[derive(clap::Args)]` opt-in when a hand-written/generated CLI
@@ -176,7 +176,7 @@ HTTP : POST /api/v1/commands/greet → 200 { "message": "...", "times": 1 }   (b
 
 Drop the process-global context singleton. Capabilities (fs/net) and config are
 shared (`Arc`); a lightweight **`Ctx` is constructed per request/invocation**
-carrying `request_id` and a deadline. This is the seam for future auth — but we
+carrying `request_id` and a deadline. This is the seam for future auth - but we
 add **no `user_id`/identity field now** (auth is explicitly undecided). Adding it
 later is a field on `Ctx` + middleware, not a signature break.
 
@@ -187,11 +187,11 @@ later is a field on `Ctx` + middleware, not a signature break.
 
 ### 4.1 Transport split (mirrors the reference)
 
-- **API + MCP are auto-derived** by looping the registry — no per-command
+- **API + MCP are auto-derived** by looping the registry - no per-command
   boilerplate. Adding a `Command` makes it callable over HTTP (and MCP) for free.
 - **CLI subcommands are hand-written** (clap), importing and calling the same
   command/service, so each gets first-class flags and output. The CLI is not
-  generated from the registry — only the *core logic + schema* is shared.
+  generated from the registry - only the *core logic + schema* is shared.
 - **Cross-cutting concerns (auth, rate limit, logging) go in the transport
   layer** (tower middleware for HTTP), never in `engine`. The core stays pure.
 
@@ -214,7 +214,7 @@ GET  /api/v1/doctor                → env report
 
 - Response body is the **bare `Output`**; `run_id`/timing in `x-run-id` etc.
 - tower middleware: CORS (frontend), tracing, request-id, timeout. This is the
-  seam where auth/rate-limit slot in later — never in `engine`.
+  seam where auth/rate-limit slot in later - never in `engine`.
 - Error mapping: `CommandError::error_code()` → HTTP status (InvalidInput→400,
   PermissionDenied→403, NetworkError→502, IoError→500, …) + a small problem body.
 - `serve` is structured so a `/mcp` sub-router can be mounted later without
@@ -237,7 +237,7 @@ YAML harness can additionally be pointed at the HTTP API for end-to-end checks.
 Move `src-tauri/src/global_config.rs` + `global_config.yaml` into
 `crates/config`:
 - Keep the `AppConfig` (full, with secret API keys) vs `FrontendConfig`
-  (sanitized) split — the sanitizer is reused for any payload the API exposes
+  (sanitized) split - the sanitizer is reused for any payload the API exposes
   to the frontend. **This is now a security boundary**: it used to feed a
   bundled webview over IPC; it will now serve over HTTP to a browser. Add a test
   asserting no secret field ever serializes, and exercise it in 5.1.
@@ -280,7 +280,7 @@ sample commands are coherent headless:
 ## 8c. Project onboarding + command scaffolding
 
 Verified from mcp-template source: it has **two unrelated systems**, and we
-mirror the split. Today's `make init` is only a thin Tauri rename — we replace
+mirror the split. Today's `make init` is only a thin Tauri rename - we replace
 it with the richer model.
 
 ```
@@ -296,7 +296,7 @@ it with the richer model.
    .env setup · prek hooks                        (+ optional CLI subcommand)
 ```
 
-### A. Project onboarding — `make init` → `appctl init`
+### A. Project onboarding - `make init` → `appctl init`
 
 A Rust onboarding subcommand mirroring mcp-template's `init/onboard.py`, living
 in `crates/cli/src/init/`:
@@ -322,11 +322,11 @@ Adopt the reference's proven patterns:
   existence-guarded.
 - **`toml_edit`, not regex, for `Cargo.toml`.** Pruning a surface = remove the
   crate dir + drop it from `[workspace].members` and dependents'
-  `[dependencies]` — format-preserving and robust (the reference uses brittle
+  `[dependencies]` - format-preserving and robust (the reference uses brittle
   regex on `pyproject.toml`; we do better).
 - **Rename sentinels** (`rust-template`/`appctl`/`myorg`) replaced across an
   extension allowlist via `walkdir`, skipping `.git`/`target`/`node_modules`;
-  GitHub owner/repo auto-detected from `git remote`. Read-only on git — never
+  GitHub owner/repo auto-detected from `git remote`. Read-only on git - never
   commit/push.
 
 `make init` wraps it:
@@ -336,7 +336,7 @@ init:
 	  $(if $(CONFIG),--config $(CONFIG),) $(if $(DRY_RUN),--dry-run,) $(ARGS)
 ```
 
-### B. Command scaffolding — `appctl new <name>`
+### B. Command scaffolding - `appctl new <name>`
 
 A `string`-substitution generator over `templates/command.rs.tpl` (no
 cookiecutter/Jinja needed) that creates a new **engine `Command`** (input/output
@@ -345,7 +345,7 @@ structs + impl) and optionally a CLI subcommand wrapper.
 - **Auto-registration:** clap/Rust have no runtime module discovery like
   Python's. To keep the "drop a file, it's registered" UX, register engine
   commands with **`inventory`** (or `linkme`) so a generated command
-  self-registers at link time — no hand-editing a `mod.rs` registration list.
+  self-registers at link time - no hand-editing a `mod.rs` registration list.
   This is a small but high-value decision for the registry design (Phase 2).
 
 ### C. Onboarding skill
@@ -356,7 +356,7 @@ onboard`→`make init`, `pyproject.toml`→`Cargo.toml`, verify via `cargo
 build`/`cargo test`/`appctl --help` + `/healthz`. Keep the skill pointing at one
 declared source-of-truth file (`crates/cli/src/init/config.rs`).
 
-> Note: `inventory`-based auto-registration (B) feeds back into Phase 2 — if we
+> Note: `inventory`-based auto-registration (B) feeds back into Phase 2 - if we
 > want it, the typed `Command` registry should collect entries via `inventory`
 > rather than a hand-maintained `register()` list.
 
@@ -368,7 +368,7 @@ declared source-of-truth file (`crates/cli/src/init/config.rs`).
   Pruning a surface drops its feature from the `default` list (via `toml_edit`,
   format-preserving) and deletes the now-unreferenced files (e.g.
   `serve_http.rs`). Because the code is `#[cfg(...)]`-gated, every combination
-  compiles cleanly under `clippy -D warnings` — no dead code, no fragile match
+  compiles cleanly under `clippy -D warnings` - no dead code, no fragile match
   editing. `Init`/`New` stay ungated so onboarding/scaffolding always work.
 - **Prune scope this iteration:** the `cli`/`http-api` surface features,
   `frontend` (`src/`, `index.html`, `vite.config.ts`, package.json frontend
@@ -377,7 +377,7 @@ declared source-of-truth file (`crates/cli/src/init/config.rs`).
   (`frontend ⇒ http_api`; dropping `http_api` drops `frontend`+`docker`).
 - **`command.rs.tpl` is embedded** via `include_str!`, so `appctl new` works
   from any cwd. It writes `crates/engine/src/commands/<name>.rs` and inserts a
-  sorted `mod <name>;` line — the only wiring `inventory` can't do at link time.
+  sorted `mod <name>;` line - the only wiring `inventory` can't do at link time.
 - **`.env` bootstrap** copies `.env.example → .env` (existence-guarded);
   interactive per-secret masking (reference's `env.rs`) is left for a later pass.
 - Every mutator (rename/prune/env) is idempotent and dry-run-first; the wizard
@@ -386,7 +386,7 @@ declared source-of-truth file (`crates/cli/src/init/config.rs`).
 ## 9. Teardown checklist (Tauri/desktop removal)
 
 - Delete `src-tauri/` (lib.rs, main.rs, logging.rs, global_config, capabilities,
-  icons, tauri.conf.json, build.rs). **First relocate `asset_gen.rs`** — it is
+  icons, tauri.conf.json, build.rs). **First relocate `asset_gen.rs`** - it is
   kept (see below), so move it out before deleting the crate.
 - Remove `src-tauri` from workspace members; add `crates/config`.
 - `package.json`: drop `@tauri-apps/*`, `tauri` script; rename app; move to
@@ -394,14 +394,14 @@ declared source-of-truth file (`crates/cli/src/init/config.rs`).
 - `Makefile`: replace `tauri-dev`/`tauri-build` with `run` (`cargo run -p cli --
   serve`) / `cargo build`; fix `test` to `cargo test --workspace` (currently
   `cd src-tauri && cargo test`).
-- CI: `rust_checks.yaml` — drop GTK/WebKit apt deps; `build_verification.yaml`
-  — replace `tauri build` with `cargo build --workspace`; **replace `release.yml`
+- CI: `rust_checks.yaml` - drop GTK/WebKit apt deps; `build_verification.yaml`
+  - replace `tauri build` with `cargo build --workspace`; **replace `release.yml`
   with `cargo-dist`** (§13) for cross-platform binary releases + installers.
 - **Keep asset-gen**, but relocate it out of `src-tauri` into its own crate
   (e.g. `crates/assetgen`, a `[[bin]]`). Keep `make banner`/`logo` (still needs
   `APP__GEMINI_API_KEY`). Repoint output paths (logos → `docs/public/`, banner →
   `media/`) since they no longer serve desktop icons.
-- **Keep the `docs/` Next.js site** and its Jules translation workflow — it's
+- **Keep the `docs/` Next.js site** and its Jules translation workflow - it's
   backend-independent. Reframe its content from Tauri to server/CLI.
 - Add a **`Dockerfile`** for the server (§13).
 - Clean orphan `crates/onboard/` (delete, or promote to a real crate).
@@ -450,14 +450,14 @@ is deleted, so the core always compiles standalone.
 
 All prior open questions are now decided (see §13 for the packaging detail):
 
-- **Release:** `cargo-dist` — cross-platform binaries + installers, replacing
+- **Release:** `cargo-dist` - cross-platform binaries + installers, replacing
   `release.yml`.
 - **asset-gen:** kept, relocated out of `src-tauri` into its own crate.
 - **docs site:** kept (reframed Tauri → server); Jules translation workflow stays.
 - **Dockerfile:** added, for the server.
 - **Frontend:** convert the existing React/Vite app to a `fetch`-based `/api/v1`
-  client (Phase 6) — not slimmed, not removed.
-- **Auth/identity:** deliberately deferred — `Ctx` carries no `user_id` yet; the
+  client (Phase 6) - not slimmed, not removed.
+- **Auth/identity:** deliberately deferred - `Ctx` carries no `user_id` yet; the
   middleware seam is left open (see §4.1).
 
 ## 13. Packaging & deployment
@@ -476,7 +476,7 @@ All prior open questions are now decided (see §13 for the packaging detail):
     `package.json` for now because the React `src/` still imports them; they are
     removed together with the `invoke()`→`fetch()` conversion in Phase 6. Only
     the `tauri` npm script and `@tauri-apps/cli` were dropped here.
-- **`Dockerfile`** — multi-stage: `cargo build --release -p appctl` in a builder
+- **`Dockerfile`** - multi-stage: `cargo build --release -p appctl` in a builder
   stage, copy the binary into a slim runtime base (distroless/debian-slim),
   `EXPOSE` the configured port, `ENTRYPOINT ["appctl", "serve"]`. Host/port and
   config via env (`APP__…`, `APP_CONFIG_PATH`). `.dockerignore` excludes

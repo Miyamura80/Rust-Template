@@ -3,7 +3,7 @@
 Authoritative rules for the automated Jules translation workflow.
 Jules **must** read this file before translating any docs.
 
-## Glossary — NEVER translate these terms
+## Glossary - NEVER translate these terms
 
 ### Product & brand names
 
@@ -63,5 +63,5 @@ Jules **must** read this file before translating any docs.
 6. Never modify English source files (`.mdx` without a language suffix).
 7. Never modify any files outside `docs/content/`.
 8. For `meta.json` files, create/update `meta.<lang>.json`. Translate `"title"` values but keep `"pages"` array values unchanged.
-9. Open a single PR containing all locale updates — do not open one PR per locale.
+9. Open a single PR containing all locale updates - do not open one PR per locale.
 10. The PR title must follow the pattern: `docs(i18n): sync translations for updated English docs`

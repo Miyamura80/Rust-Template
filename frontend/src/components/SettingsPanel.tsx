@@ -130,7 +130,7 @@ export function SettingsPanel({
 									<div className="settings-row">
 										<span className="settings-label">Fallback</span>
 										<span className="settings-value">
-											{config.default_llm.fallback_model ?? "—"}
+											{config.default_llm.fallback_model ?? "-"}
 										</span>
 									</div>
 									<div className="settings-row">

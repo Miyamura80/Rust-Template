@@ -26,7 +26,8 @@
 		"max_lines": 500,
 		"exclude": [
 			"crates/assetgen/src/main.rs",
-			"crates/engine/src/scenario.rs"
+			"crates/engine/src/scenario.rs",
+			"scripts/sync_agent_config.ts"
 		]
 	},
 	"devDependencies": {

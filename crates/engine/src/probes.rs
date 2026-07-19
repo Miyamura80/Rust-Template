@@ -177,7 +177,7 @@ async fn probe_network(ctx: &AppContext) -> CommandResult {
     r.data = Some(serde_json::json!({
         "dns_addresses": addrs,
         "http_status": status,
-        // Names only — values can embed credentials (e.g. an authenticated
+        // Names only - values can embed credentials (e.g. an authenticated
         // HTTP_PROXY URL) and this probe is reachable over the HTTP API.
         "proxy_env_set": crate::env::proxy_env_names(),
         "target_url": host,

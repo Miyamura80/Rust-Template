@@ -8,7 +8,7 @@ paths:
 
 # Codex <-> Claude skill & subagent sync
 
-This repo is dual-tool: both Claude Code and Codex CLI are expected to work. Skills and subagents are shared where possible. Read this before creating, editing, or moving any skill or subagent in this repo.
+This repo is dual-tool: both Claude Code and Codex CLI are expected to work. Skills, subagents, and the root agent docs are shared where possible. Read this before creating, editing, or moving any skill or subagent in this repo.
 
 ## Layout
 
@@ -17,6 +17,8 @@ This repo is dual-tool: both Claude Code and Codex CLI are expected to work. Ski
 .claude/skills/<name>                 # symlink -> ../../.agents/skills/<name>
 .claude/agents/<name>.md              # source of truth (markdown + YAML frontmatter)
 .codex/agents/<name>.toml             # GENERATED from the .md; commit it
+<dir>/CLAUDE.md                       # source of truth (any dir, root or nested)
+<dir>/AGENTS.md                       # symlink -> CLAUDE.md (Codex reads this)
 scripts/sync_agent_config.ts          # converter (bun run)
 ```
 
@@ -55,16 +57,22 @@ Rules:
 - Claude-only frontmatter keys (`tools`, `model`, `color`) don't translate - they are preserved as reference comments in the TOML. Document tool expectations in the prose body so both sides pick them up.
 - Inside the body, avoid literal `"""` sequences (they'd close the TOML string); the converter escapes them but it's easier to just not use them.
 
+## CLAUDE.md <-> AGENTS.md: mirror, don't duplicate
+
+Claude reads `CLAUDE.md`; Codex reads `AGENTS.md`. To keep them identical without hand-syncing, `CLAUDE.md` is the **source of truth** and `AGENTS.md` is a symlink pointing at the sibling `CLAUDE.md`. This applies to **every** directory, root and nested, and `make sync-agent-config` maintains it:
+
+- A directory with a `CLAUDE.md` gets a sibling `AGENTS.md` symlink created if missing.
+- A pre-existing real `AGENTS.md` (a drifted hand-written copy) is **replaced** by the symlink - edit `CLAUDE.md`, never `AGENTS.md`.
+
 ## Do not try to sync these
 
 - `.claude/rules/*.md` vs `.codex/rules/*.rules` - different languages (prose vs permission DSL). Maintain separately.
 - `.claude/commands/*.md` - Claude-only; Codex has no slash-command runtime.
-- `CLAUDE.md` vs `AGENTS.md` - kept identical via a root `AGENTS.md -> CLAUDE.md` symlink (Codex reads `AGENTS.md`, Claude reads `CLAUDE.md`). Edit `CLAUDE.md`; never `AGENTS.md`.
 
 ## Tooling
 
-- `make sync-agent-config` - idempotent. Creates missing `.claude/skills/` symlinks for every shared skill under `.agents/skills/`, regenerates `.codex/agents/*.toml` from `.claude/agents/*.md`, auto-prunes dangling symlinks and orphan TOMLs silently.
-- Pre-commit: [`prek`](https://prek.j178.dev/installation/), configured in `prek.toml` at repo root. Register once per clone with `prek install`. Runs the sync in `--check` mode and fails the commit if it produced drift.
+- `make sync-agent-config` - idempotent. Creates missing `.claude/skills/` symlinks for every shared skill under `.agents/skills/`, regenerates `.codex/agents/*.toml` from `.claude/agents/*.md`, mirrors every `CLAUDE.md` to a sibling `AGENTS.md` symlink, and auto-prunes dangling symlinks and orphan TOMLs silently. Pass `--check` (as the prek hook and CI do) to fail on drift instead of fixing it.
+- Pre-commit: [`prek`](https://prek.j178.dev/installation/), configured in `prek.toml` at repo root. Register once per clone with `prek install`. Runs `bun run scripts/sync_agent_config.ts --check` and fails the commit on drift.
 - TypeScript script runs via `bun run scripts/sync_agent_config.ts`. It is self-contained (no npm deps) - it parses the small single-line-scalar frontmatter itself.
 
 ## When adding a new skill or subagent

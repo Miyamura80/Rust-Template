@@ -7,7 +7,7 @@
 //! - [`Ctx`] is constructed **per request/invocation**, borrowing the shared
 //!   capabilities and carrying request-scoped data (`request_id`, `deadline`).
 //!   Commands receive `&Ctx`. This is the seam where auth/identity would later
-//!   attach — no identity field exists yet, by design.
+//!   attach - no identity field exists yet, by design.
 
 use crate::platform::{ReqwestNetwork, StdFilesystem};
 use crate::traits::*;
@@ -17,7 +17,7 @@ use std::time::Instant;
 /// Central context passed to all engine operations.
 ///
 /// Holds trait-object capabilities. [`AppContext::default`] wires the real
-/// platform implementations; [`AppContext::new`] is the injection seam — pass
+/// platform implementations; [`AppContext::new`] is the injection seam - pass
 /// stub capabilities to it to run a command against fakes (e.g. an offline test
 /// filesystem/network).
 pub struct AppContext {

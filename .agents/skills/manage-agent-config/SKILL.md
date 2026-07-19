@@ -46,6 +46,10 @@ All of those are Claude-only. In Codex they pass through literally and confuse t
 
 Claude `.md` frontmatter keys that don't exist in Codex (`tools`, `model`, `color`) are preserved as TOML comments in the generated `.codex/agents/<name>.toml` for human reference. They do not affect Codex behavior. If tool restrictions matter to the agent's job, describe them in the prose body so both tools read them.
 
+## CLAUDE.md <-> AGENTS.md
+
+Claude reads `CLAUDE.md`; Codex reads `AGENTS.md`. `CLAUDE.md` is the source of truth and every directory holding one gets a sibling `AGENTS.md` **symlink** to it, maintained by `make sync-agent-config`. Never hand-edit `AGENTS.md` - edit `CLAUDE.md`.
+
 ## After any change
 
 Always run `make sync-agent-config` (which runs `bun run scripts/sync_agent_config.ts`). The prek pre-commit hook will block the commit otherwise. The script is idempotent and silent when there's nothing to do.

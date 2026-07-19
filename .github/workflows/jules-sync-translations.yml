@@ -67,7 +67,7 @@ jobs:
             echo "Found last successful sync at ${LAST_SHA}"
           else
             echo "last_sha=" >> "$GITHUB_OUTPUT"
-            echo "No previous successful run found — will diff against parent"
+            echo "No previous successful run found - will diff against parent"
           fi
 
       # ── 3. Detect changed English source docs ─────────────────────
@@ -86,7 +86,7 @@ jobs:
           echo "sha=${SHA}"
 
           if [[ -z "$BEFORE" ]] || ! git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then
-            echo "No prior successful run — diffing against parent commit"
+            echo "No prior successful run - diffing against parent commit"
             if git rev-parse --verify "${SHA}^" >/dev/null 2>&1; then
               CHANGED=$(git diff --name-only "${SHA}^" "$SHA" -- docs/content/ || true)
             else
@@ -124,7 +124,7 @@ jobs:
           done <<< "$CHANGED"
 
           if [[ ${#ENGLISH_FILES[@]} -eq 0 ]]; then
-            echo "No English source doc changes found — nothing to translate."
+            echo "No English source doc changes found - nothing to translate."
             echo "has_changes=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -281,7 +281,7 @@ jobs:
                 exit 1
                 ;;
               *)
-                # Still running — wait and retry
+                # Still running - wait and retry
                 sleep "$POLL_INTERVAL_SECONDS"
                 ;;
             esac
@@ -310,7 +310,7 @@ jobs:
             echo "## Jules Translation Sync"
             echo ""
             if [[ "${HAS_CHANGES}" != "true" ]]; then
-              echo "No English source doc changes detected — nothing to translate."
+              echo "No English source doc changes detected - nothing to translate."
             else
               echo "**Files processed:** ${FILE_COUNT}"
               echo ""

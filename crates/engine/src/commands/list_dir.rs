@@ -41,7 +41,7 @@ impl Command for ListDir {
         "List the entries of a directory."
     }
 
-    /// Lists a caller-supplied path with no sandbox — CLI-only so it is not
+    /// Lists a caller-supplied path with no sandbox - CLI-only so it is not
     /// reachable as an unauthenticated directory-enumeration over the HTTP API.
     fn expose(&self) -> Expose {
         Expose::cli_only()
