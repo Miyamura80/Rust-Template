@@ -10,7 +10,7 @@ use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 // ---------------------------------------------------------------------------
-// Sentinels — the template's own names, replaced during rename.
+// Sentinels - the template's own names, replaced during rename.
 // ---------------------------------------------------------------------------
 
 /// Lowercase/kebab project sentinel (package.json name, crate references).
@@ -63,9 +63,9 @@ impl Profile {
 /// pruned surface compiles out cleanly rather than being deleted from source.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Surface {
-    /// CLI diagnostic subcommands — cargo feature `cli`.
+    /// CLI diagnostic subcommands - cargo feature `cli`.
     Cli,
-    /// axum HTTP API (`appctl serve`) — cargo feature `http-api`.
+    /// axum HTTP API (`appctl serve`) - cargo feature `http-api`.
     HttpApi,
 }
 

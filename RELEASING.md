@@ -22,7 +22,7 @@ from that config once `cargo-dist` is available on your machine.
 
 ## Release Workflow
 
-### Step 1 — Bump versions
+### Step 1 - Bump versions
 
 ```bash
 make bump-version VERSION=1.2.0
@@ -31,7 +31,7 @@ make bump-version VERSION=1.2.0
 This updates the version field in `crates/cli/Cargo.toml` and `package.json`
 and refreshes `Cargo.lock`.
 
-### Step 2 — Commit and tag
+### Step 2 - Commit and tag
 
 ```bash
 git add crates/cli/Cargo.toml package.json Cargo.lock
@@ -40,12 +40,12 @@ git tag v1.2.0
 git push origin main --tags
 ```
 
-### Step 3 — Watch CI
+### Step 3 - Watch CI
 
 The [Release workflow](.github/workflows/release.yml) triggers on the tag. Check
 the **Actions** tab; all platforms build in parallel.
 
-### Step 4 — Verify the release
+### Step 4 - Verify the release
 
 Once CI completes, visit **Releases** on GitHub, confirm the per-platform
 archives are attached, edit the release notes if desired, and publish.

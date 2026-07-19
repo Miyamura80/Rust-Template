@@ -36,7 +36,7 @@ protocol envelope.
 1. Add an MCP server dep (e.g. `rmcp`) behind a new `mcp` cargo feature, so it
    is prunable like `cli` / `http-api`.
 2. `tools/list`: map `registry.schemas().filter(|s| s.expose.mcp)` to MCP tool
-   definitions — `name`, `description`, and `inputSchema` = the command's
+   definitions - `name`, `description`, and `inputSchema` = the command's
    `input_schema`. (The `Expose::mcp` flag already exists to hide CLI-only
    utility commands from the tool surface, mirroring the reference template's
    exclusion set.)
@@ -50,6 +50,6 @@ protocol envelope.
 
 ## Cross-cutting concerns
 
-Auth, rate limiting, and logging live in the transport layer — a tower-style
+Auth, rate limiting, and logging live in the transport layer - a tower-style
 guard for MCP, never in `engine`. The core stays pure, exactly as it does for
 the HTTP path.

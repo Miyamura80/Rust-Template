@@ -10,7 +10,7 @@ use dialoguer::{Confirm, Input, Select};
 /// Run the wizard, returning an un-expanded [`Config`] (the caller expands and
 /// plans). `defaults` seeds the prompts (e.g. org auto-detected from git).
 pub fn run(defaults: &Config) -> Result<Config> {
-    println!("appctl init — interactive setup\n");
+    println!("appctl init - interactive setup\n");
 
     let project_name: String = Input::new()
         .with_prompt("Project name")
@@ -79,9 +79,9 @@ pub fn confirm_apply() -> Result<bool> {
 
 fn profile_label(p: Profile) -> String {
     match p {
-        Profile::CliOnly => "cli-only     — CLI diagnostics, no server".to_string(),
-        Profile::ServerOnly => "server-only  — HTTP API, no CLI diagnostics".to_string(),
-        Profile::CliServer => "cli+server   — both (template default)".to_string(),
+        Profile::CliOnly => "cli-only     - CLI diagnostics, no server".to_string(),
+        Profile::ServerOnly => "server-only  - HTTP API, no CLI diagnostics".to_string(),
+        Profile::CliServer => "cli+server   - both (template default)".to_string(),
     }
 }
 

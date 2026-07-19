@@ -2,7 +2,7 @@
 //!
 //! Routes are **auto-derived** from the command registry (one `POST` per
 //! command), mirroring the reference. Cross-cutting concerns live here in the
-//! tower middleware stack (CORS, tracing, timeout, request-id) — never in
+//! tower middleware stack (CORS, tracing, timeout, request-id) - never in
 //! `engine`. Responses are the **bare typed `Output`**; the `run_id` rides in
 //! the `x-run-id` header. The router is built by [`build_app`] so it can be
 //! driven in-process by `tower::ServiceExt::oneshot` in tests, and is shaped so
@@ -36,7 +36,7 @@ pub struct AppState {
 }
 
 /// Operational tunables for the HTTP server, sourced from `global_config.yaml`
-/// (`server.*`). Kept out of [`AppState`] since middleware — not handlers —
+/// (`server.*`). Kept out of [`AppState`] since middleware - not handlers -
 /// consumes them.
 pub struct ServeSettings {
     pub request_timeout: Duration,
@@ -184,8 +184,8 @@ async fn run_command(
     headers: HeaderMap,
     body: Bytes,
 ) -> Response {
-    // Only API-exposed commands are reachable over HTTP; anything else — unknown
-    // or CLI-only — is a 404 with no distinction (don't leak the CLI surface).
+    // Only API-exposed commands are reachable over HTTP; anything else - unknown
+    // or CLI-only - is a 404 with no distinction (don't leak the CLI surface).
     if !matches!(st.registry.schema(&name), Some(s) if s.expose.api) {
         return problem(
             StatusCode::NOT_FOUND,
@@ -421,8 +421,8 @@ mod tests {
     #[tokio::test]
     async fn cli_only_command_is_not_exposed_over_http() {
         // read_file / write_file / list_dir / http_request are `Expose::cli_only()`
-        // (arbitrary file access + SSRF). The HTTP surface must 404 them — not
-        // dispatch, and not leak that they exist — same as an unknown command.
+        // (arbitrary file access + SSRF). The HTTP surface must 404 them - not
+        // dispatch, and not leak that they exist - same as an unknown command.
         for name in ["read_file", "write_file", "list_dir", "http_request"] {
             let resp = test_app()
                 .oneshot(post(&format!("/api/v1/commands/{name}"), "{}"))

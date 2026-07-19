@@ -3,7 +3,7 @@
 //! A [`Command`] is the unit of backend logic. It declares a typed `Input`
 //! (deserialized from the request body / CLI args) and a typed `Output`
 //! (serialized back to the caller). Both derive [`schemars::JsonSchema`], so
-//! every transport gets a JSON Schema for free — the HTTP `GET /commands`
+//! every transport gets a JSON Schema for free - the HTTP `GET /commands`
 //! introspection endpoint and the future MCP `tools/list` both read it.
 //!
 //! Commands **self-register** at link time via [`inventory`]: dropping a new
@@ -153,7 +153,7 @@ impl Default for Expose {
 
 /// A unit of backend logic with a typed input/output contract.
 ///
-/// The trait deliberately does **not** bound `Input` on `clap::Args` — the
+/// The trait deliberately does **not** bound `Input` on `clap::Args` - the
 /// engine stays free of CLI concerns. Individual input structs may add a
 /// `#[derive(clap::Args)]` when a hand-written/generated CLI subcommand wants
 /// to reuse them (see the CLI scaffolding phase).
@@ -278,7 +278,7 @@ impl CommandRegistry {
             let cmd = (reg.make)();
             let name = cmd.name();
             if commands.insert(name, cmd).is_some() {
-                // Two commands claimed the same name — a scaffolding mistake.
+                // Two commands claimed the same name - a scaffolding mistake.
                 panic!("duplicate command registered: {name}");
             }
         }
@@ -448,7 +448,7 @@ mod tests {
         let schema = reg.schema("read_file").expect("read_file schema");
         assert_eq!(schema.name, "read_file");
         // read_file reads a caller-supplied path with no sandbox, so it is
-        // CLI-only — reachable via the CLI, never over the unauthenticated API.
+        // CLI-only - reachable via the CLI, never over the unauthenticated API.
         assert!(schema.expose.cli);
         assert!(!schema.expose.api);
         // The input schema should describe the required `path` field.

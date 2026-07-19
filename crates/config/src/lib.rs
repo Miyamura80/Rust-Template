@@ -3,7 +3,7 @@
 //!
 //! [`AppConfig`] is the full config including secret credentials;
 //! [`FrontendConfig`] is the sanitized projection safe to expose over HTTP. The
-//! sanitizer is a **security boundary** — no secret field may ever cross it
+//! sanitizer is a **security boundary** - no secret field may ever cross it
 //! (enforced by `#[serde(skip_serializing)]` and covered by tests here). Config
 //! loads from `global_config.yaml` (next to this crate, or `APP_CONFIG_PATH`),
 //! layered with optional `production_config.yaml` / `.global_config.yaml`, then
@@ -30,7 +30,7 @@ pub struct AppConfig {
     #[serde(default)]
     pub features: HashMap<String, bool>,
 
-    // Secret credentials — never serialized (`skip_serializing` = the security
+    // Secret credentials - never serialized (`skip_serializing` = the security
     // boundary; see the sanitization test). Read via the accessors below.
     #[serde(skip_serializing)]
     pub openai_api_key: Option<String>,

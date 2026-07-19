@@ -1,7 +1,7 @@
 # Product Requirements Document: Python-to-Rust Tauri Migration
 
 > **ARCHIVED (legacy).** This describes the earlier Tauri/desktop foundation,
-> which has since been superseded. The template is now a Rust server + CLI/API —
+> which has since been superseded. The template is now a Rust server + CLI/API -
 > see [`docs/PRD-server-template.md`](../PRD-server-template.md). Kept for history only.
 
 

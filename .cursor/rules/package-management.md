@@ -5,7 +5,7 @@ This repository no longer relies on Python tooling. Bun is the only supported pa
 - **Run scripts**: Always use `bun run <script>` (or `bunx` when a tool isn’t installed globally) instead of `npm run`/`yarn`/`pnpm`.
 - **Docs workspace**: The `docs/` site ships with its own `bun.lock`. Run `cd docs && bun install` whenever you sync the workspace.
 - **Rust helpers**: Use `cargo` for backend tooling (`cargo test`, `cargo run --bin asset-gen -- banner|logo`, etc.); the asset generator also consults `APP__GEMINI_API_KEY`.
-- **Lockfile hygiene**: Treat `bun.lock` (and `docs/bun.lock`) as the single source of truth—never edit it manually; use `bun install` to update it.
+- **Lockfile hygiene**: Treat `bun.lock` (and `docs/bun.lock`) as the single source of truth; never edit it manually; use `bun install` to update it.
 
 ## Troubleshooting
 

@@ -50,7 +50,7 @@ impl Command for HttpRequest {
         "Perform an outbound HTTP GET and return the status and a body snippet."
     }
 
-    /// Fetches a caller-supplied URL with no scheme/host allowlist — CLI-only so
+    /// Fetches a caller-supplied URL with no scheme/host allowlist - CLI-only so
     /// it is not reachable as an unauthenticated SSRF primitive over the HTTP API.
     fn expose(&self) -> Expose {
         Expose::cli_only()

@@ -19,15 +19,15 @@ other.
 
 1. Inspect the repo before changing anything:
    - `AGENTS.md` / `CLAUDE.md`, the workspace `Cargo.toml`, `Makefile`, `README.md`
-   - `crates/cli/src/init/config.rs` — especially the config enums, the
+   - `crates/cli/src/init/config.rs` - especially the config enums, the
      per-profile presets, `expand()` (dependency implications), and the
      prune-path groups (exactly which files/crates each choice removes)
    - The surfaces themselves: the engine command registry (`crates/engine/`),
      the CLI (`crates/cli/`), the HTTP API (`appctl serve` / the `server`
      module), config (`crates/config/`), `docs/`, and relevant tests
-   - Systems `make init` does NOT manage (handle these manually — see step 7):
+   - Systems `make init` does NOT manage (handle these manually - see step 7):
      release CI (`.github/workflows/`). Note `frontend/`, `Dockerfile`, and the
-     `docs/` site ARE pruned by init when their surface/flag is deselected — do
+     `docs/` site ARE pruned by init when their surface/flag is deselected - do
      not hand-delete them.
 
 2. Interview the user briefly. Prefer grouped multi-select questions:
@@ -59,7 +59,7 @@ other.
 
 5. Let onboarding prune deterministically; do not hand-delete. A non-dry run
    removes files/crates and also rewrites, in the same pass, `Cargo.toml`
-   (workspace `members`, dependents' `[dependencies]`, `[[bin]]` targets — via
+   (workspace `members`, dependents' `[dependencies]`, `[[bin]]` targets - via
    `toml_edit`, format-preserving), `Makefile` targets, and `.env.example` keys
    for pruned surfaces. Pruning `http_api` drops the `server` module/routes and
    the `frontend/`; pruning `frontend` drops `frontend/` and its package
@@ -75,7 +75,7 @@ other.
    - `frontend/` branding/content (if kept) almost always needs rebranding.
    - Release workflows (`.github/workflows/`) are not wired into pruning; update
      or remove them to match the kept surfaces. (`frontend/`, `Dockerfile`, and
-     the `docs/` site are pruned automatically by their surface/flag — no manual
+     the `docs/` site are pruned automatically by their surface/flag - no manual
      deletion needed.)
 
 ## Guardrails
@@ -83,7 +83,7 @@ other.
 - Do not delete the API/server, the frontend, docs, or deploy configs without
   explicit user confirmation.
 - Do not push to `main`, force-push, or run destructive git commands. Onboarding
-  reads `git remote` only — it never commits or pushes.
+  reads `git remote` only - it never commits or pushes.
 - Always dry-run and have the user confirm the plan before any mutating pass.
 - Prefer `toml_edit` over regex for any `Cargo.toml` change.
 - Keep the optional frontend framed as an example/visualization layer, not core

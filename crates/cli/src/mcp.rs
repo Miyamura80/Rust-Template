@@ -1,4 +1,4 @@
-//! `appctl mcp` — placeholder for the future MCP transport.
+//! `appctl mcp` - placeholder for the future MCP transport.
 //!
 //! MCP is **designed-for but not built** this iteration (see the PRD §8 and
 //! `docs/mcp.md`). It needs nothing new from `engine`: the typed command

@@ -5,7 +5,7 @@ description: Guide for making changes to the Rust backend of the server template
 
 # Update Backend Skill
 
-Use this skill whenever you are modifying Rust backend logic — adding commands, probes, traits, or configuration in `crates/engine` or `crates/cli`.
+Use this skill whenever you are modifying Rust backend logic - adding commands, probes, traits, or configuration in `crates/engine` or `crates/cli`.
 
 ## Architecture
 
@@ -13,15 +13,15 @@ The backend is split into two layers:
 
 | Layer | Path | Role |
 |-------|------|------|
-| **engine** | `crates/engine/` | All real backend logic. No transport dependency — runs in the CLI, the HTTP API, and tests. |
+| **engine** | `crates/engine/` | All real backend logic. No transport dependency - runs in the CLI, the HTTP API, and tests. |
 | **appctl** | `crates/cli/` | The `appctl` binary. Drives `engine` over the CLI (`call`/`probe`/`doctor`/`run-scenario`) and the axum HTTP API (`serve`), gated behind the `cli` / `http-api` cargo features. |
 
 ### Design Principles (engine)
 
-- **No transport dependency** — never import CLI, axum, or HTTP types inside `crates/engine`.
-- **Trait-based OS access** — filesystem and network go through `FilesystemOps`, `NetworkOps`. Inject real platform or headless stubs via `AppContext`.
-- **Structured results** — every operation returns `CommandResult` with `run_id`, `status`, `error`, `timing_ms`, and `env_summary`.
-- **No panics on missing capabilities** — headless environments get `SKIP` or `UNSUPPORTED` error codes.
+- **No transport dependency** - never import CLI, axum, or HTTP types inside `crates/engine`.
+- **Trait-based OS access** - filesystem and network go through `FilesystemOps`, `NetworkOps`. Inject real platform or headless stubs via `AppContext`.
+- **Structured results** - every operation returns `CommandResult` with `run_id`, `status`, `error`, `timing_ms`, and `env_summary`.
+- **No panics on missing capabilities** - headless environments get `SKIP` or `UNSUPPORTED` error codes.
 
 ## Code Style (Rust)
 
@@ -33,7 +33,7 @@ The backend is split into two layers:
 
 Commands implement the typed, async `Command` trait (one input struct drives the
 CLI args, the HTTP body schema, and the future MCP tool schema) and
-**self-register at link time** via `register_command!` — there is no
+**self-register at link time** via `register_command!` - there is no
 hand-maintained registration list.
 
 The fastest path is the scaffolder: `appctl new <name>` (or `make new
@@ -85,7 +85,7 @@ register_command!(MyCommand);
 ```
 
 2. Declare the module in `crates/engine/src/commands/mod.rs` (`mod my_command;`).
-   The `register_command!` line does the rest — `CommandRegistry::new()` collects
+   The `register_command!` line does the rest - `CommandRegistry::new()` collects
    it automatically. (`appctl new` inserts this line for you.)
 
 3. No transport change is needed: the HTTP `POST /api/v1/commands/:name` route is
@@ -124,7 +124,7 @@ impl NetworkOps for OfflineNetwork {
 }
 ```
 
-Inject via `AppContext` — `AppContext::default()` wires the real platform capabilities (used by `appctl`); pass stub implementations to `AppContext::new(fs, network)` to run a command against fakes in tests.
+Inject via `AppContext` - `AppContext::default()` wires the real platform capabilities (used by `appctl`); pass stub implementations to `AppContext::new(fs, network)` to run a command against fakes in tests.
 
 ## Configuration
 
@@ -138,7 +138,7 @@ let config = app_config::get_config();
 println!("Model: {}", config.default_llm.default_model);
 ```
 
-`crates/engine` stays config-agnostic — do not import `app-config` there unless a
+`crates/engine` stays config-agnostic - do not import `app-config` there unless a
 command genuinely needs config; prefer passing values in via the input struct.
 
 ## Testing with appctl
