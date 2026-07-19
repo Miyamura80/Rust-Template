@@ -15,7 +15,7 @@ app-config = { path = "../config" }
 anyhow = "1.0"
 base64 = "0.22"
 clap = { version = "4", features = ["derive"] }
-image = { version = "0.25", features = ["png", "ico", "jpeg"] }
+image = { version = "0.25", default-features = false, features = ["png", "ico", "jpeg"] }
 reqwest = { version = "0.13", default-features = false, features = ["json", "rustls-no-provider", "http2", "charset", "system-proxy"] }
 rustls = { version = "0.23", default-features = false, features = ["std", "tls12", "ring"] }
 serde = { version = "1", features = ["derive"] }
