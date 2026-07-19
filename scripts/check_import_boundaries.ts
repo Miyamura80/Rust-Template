@@ -31,9 +31,15 @@ const FORBIDDEN_CRATES: Array<{ dir: string; pkg: string }> = [
 // so a forbidden dep hidden under a platform section isn't silently missed.
 const DEP_TABLE_RE =
 	/^\[(?:target\..*\.)?(dependencies|dev-dependencies|build-dependencies)\]\s*$/;
+// A `[dependencies.foo]` (or target-conditional) subtable header; captures `foo`.
+const DEP_SUBTABLE_RE =
+	/^\[(?:target\..*\.)?(?:dependencies|dev-dependencies|build-dependencies)\.([A-Za-z0-9_-]+)\]\s*$/;
 const TABLE_RE = /^\[/;
 // A dependency line: `key = ...` or `key.feature = ...`. Captures the crate key.
 const DEP_KEY_RE = /^([A-Za-z0-9_-]+)(\s*\.\s*[A-Za-z0-9_-]+)?\s*=/;
+// A renaming `package = "X"` assignment, either standalone (in a subtable) or
+// inside an inline table (`foo = { package = "X", ... }`). Captures `X`.
+const PACKAGE_RE = /(?:^|[{,]\s*)package\s*=\s*"([^"]+)"/;
 
 interface Violation {
 	line: number;
@@ -63,17 +69,51 @@ function checkManifest(manifestPath: string): Violation[] {
 	const pathFrags = forbiddenPathFragments();
 
 	let inDepTable = false;
+	// True while inside a `[dependencies.foo]` subtable, whose body may carry a
+	// renaming `package = "X"` line that aliases a forbidden crate.
+	let inDepSubtable = false;
 	for (let i = 0; i < lines.length; i++) {
 		const raw = lines[i];
 		const line = raw.replace(/#.*$/, "").trim();
 		if (line === "") continue;
 
+		// A `[dependencies.foo]` subtable header: `foo` itself may be forbidden,
+		// and its body is scanned below for a `package = "X"` rename.
+		const sub = line.match(DEP_SUBTABLE_RE);
+		if (sub) {
+			inDepTable = false;
+			inDepSubtable = true;
+			if (names.has(sub[1])) {
+				violations.push({
+					line: i + 1,
+					text: raw.trim(),
+					reason: `depends on transport crate '${sub[1]}'`,
+				});
+			}
+			continue;
+		}
 		if (DEP_TABLE_RE.test(line)) {
 			inDepTable = true;
+			inDepSubtable = false;
 			continue;
 		}
 		if (TABLE_RE.test(line)) {
 			inDepTable = false;
+			inDepSubtable = false;
+			continue;
+		}
+
+		// Inside a `[dependencies.foo]` subtable: a `package = "X"` rename that
+		// resolves to a forbidden crate is a violation even when `foo` is benign.
+		if (inDepSubtable) {
+			const pkg = line.match(PACKAGE_RE);
+			if (pkg && names.has(pkg[1])) {
+				violations.push({
+					line: i + 1,
+					text: raw.trim(),
+					reason: `renamed dependency pulls in transport crate '${pkg[1]}'`,
+				});
+			}
 			continue;
 		}
 		if (!inDepTable) continue;
@@ -85,6 +125,17 @@ function checkManifest(manifestPath: string): Violation[] {
 				line: i + 1,
 				text: raw.trim(),
 				reason: `depends on transport crate '${m[1]}'`,
+			});
+			continue;
+		}
+
+		// Inline-table rename: `ui = { package = "appctl", version = "..." }`.
+		const inlinePkg = line.match(PACKAGE_RE);
+		if (inlinePkg && names.has(inlinePkg[1])) {
+			violations.push({
+				line: i + 1,
+				text: raw.trim(),
+				reason: `renamed dependency pulls in transport crate '${inlinePkg[1]}'`,
 			});
 			continue;
 		}
