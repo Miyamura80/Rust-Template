@@ -41,6 +41,11 @@ const CLAUDE_ONLY_KEYS = new Set([
 	"disable-model-invocation",
 ]);
 
+// Shared skills may carry ONLY these frontmatter keys (allowlist).
+const SHARED_SKILL_ALLOWED_KEYS = new Set(["name", "description"]);
+// Lowercase-hyphen slug, <=64 chars.
+const SKILL_NAME_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
 const SHARED_SKILL_FORBIDDEN_KEYS = new Set([
 	"allowed-tools",
 	"disable-model-invocation",
@@ -74,6 +79,26 @@ function rel(p: string): string {
 function die(msg: string): never {
 	console.error(msg);
 	process.exit(1);
+}
+
+/**
+ * Refuse to follow a symlink when reading/writing generated TOML. Writing
+ * through a symlink would clobber an out-of-tree target (or let a planted link
+ * redirect the write); a regular file or absent path is fine.
+ */
+function assertNotSymlink(path: string): void {
+	let st: ReturnType<typeof lstatSync>;
+	try {
+		st = lstatSync(path);
+	} catch {
+		return; // absent - writeFileSync will create a regular file
+	}
+	if (st.isSymbolicLink()) {
+		die(
+			`ERROR: ${rel(path)} is a symlink; refusing to read/write generated TOML through it. ` +
+				`Remove the symlink and re-run.`,
+		);
+	}
 }
 
 /**
@@ -111,23 +136,46 @@ function parseMd(path: string): { meta: Frontmatter; body: string } {
 	return { meta, body };
 }
 
+function uEscape(ch: string): string {
+	return `\\u${ch.charCodeAt(0).toString(16).toUpperCase().padStart(4, "0")}`;
+}
+
+// TOML basic strings forbid raw control chars (U+0000-U+001F and U+007F) other
+// than tab. We first render tab/CR/LF with their short escapes, so any leftover
+// forbidden control char is caught here and encoded as `\uXXXX`.
+const TOML_BASIC_FORBIDDEN_CTRL_RE =
+	// biome-ignore lint/suspicious/noControlCharactersInRegex: matching forbidden control chars is the point
+	/[\u0000-\u001F\u007F]/g;
+
+// Multiline strings additionally allow raw tab (U+0009), LF (U+000A), and CR
+// (U+000D). Every other control char (form-feed U+000C, vertical-tab U+000B,
+// etc.) remains forbidden and must be encoded as `\uXXXX`.
+const TOML_MULTILINE_FORBIDDEN_CTRL_RE =
+	// biome-ignore lint/suspicious/noControlCharactersInRegex: matching forbidden control chars is the point
+	/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g;
+
 function tomlBasicString(s: string): string {
-	// Only used for `name` and `description`. Frontmatter rules already forbid
-	// control chars and newlines in these, so plain escape of backslash, quote,
-	// tab, and the newline pair is sufficient.
+	// Only used for `name` and `description`. Escape backslash, quote, the common
+	// whitespace escapes, and every remaining TOML-forbidden control char.
 	const escaped = s
 		.replace(/\\/g, "\\\\")
 		.replace(/"/g, '\\"')
 		.replace(/\t/g, "\\t")
 		.replace(/\r/g, "\\r")
-		.replace(/\n/g, "\\n");
+		.replace(/\n/g, "\\n")
+		.replace(TOML_BASIC_FORBIDDEN_CTRL_RE, uEscape);
 	return `"${escaped}"`;
 }
 
 function tomlMultilineString(s: string): string {
 	// Triple-quoted; escape sequences of 3+ double quotes so the string can't
-	// close prematurely. A literal `"""` becomes `""\"`.
-	const escaped = s.replace(/\\/g, "\\\\").replace(/"""/g, '""\\"');
+	// close prematurely. A literal `"""` becomes `""\"`. Raw tab/CR/LF are legal
+	// here, but other TOML-forbidden control chars (form-feed, vertical-tab, ...)
+	// must be encoded as `\uXXXX`.
+	const escaped = s
+		.replace(/\\/g, "\\\\")
+		.replace(/"""/g, '""\\"')
+		.replace(TOML_MULTILINE_FORBIDDEN_CTRL_RE, uEscape);
 	// Leading newline right after the opening """ is stripped by TOML, so add one
 	// so the content starts on its own line for readability.
 	return `"""\n${escaped}"""`;
@@ -207,14 +255,26 @@ function validateSharedSkill(skillDir: string): string[] {
 	}
 	const { meta, body } = parsed;
 	const errs: string[] = [];
-	const badKeys = Object.keys(meta)
-		.filter((k) => SHARED_SKILL_FORBIDDEN_KEYS.has(k))
+
+	// Allowlist: shared-skill frontmatter may ONLY carry `name` and `description`.
+	// Anything else (Claude-only keys, typos, Codex-only keys) is rejected so the
+	// file stays portable across both tools.
+	const extraKeys = Object.keys(meta)
+		.filter((k) => !SHARED_SKILL_ALLOWED_KEYS.has(k))
 		.sort();
-	if (badKeys.length > 0) {
+	if (extraKeys.length > 0) {
+		const claudeOnly = extraKeys.filter((k) =>
+			SHARED_SKILL_FORBIDDEN_KEYS.has(k),
+		);
+		const label =
+			claudeOnly.length > 0
+				? "Claude-only frontmatter keys"
+				: "disallowed frontmatter keys";
 		errs.push(
-			`${rel(skillMd)}: Claude-only frontmatter keys in shared skill: [${badKeys.map((k) => `'${k}'`).join(", ")}]`,
+			`${rel(skillMd)}: ${label} in shared skill (only 'name','description' allowed): [${extraKeys.map((k) => `'${k}'`).join(", ")}]`,
 		);
 	}
+
 	for (const [pat, label] of SHARED_SKILL_RAW_BODY_PATTERNS) {
 		if (pat.test(body))
 			errs.push(`${rel(skillMd)}: body uses Claude-only feature: ${label}`);
@@ -224,9 +284,22 @@ function validateSharedSkill(skillDir: string): string[] {
 		if (pat.test(scan))
 			errs.push(`${rel(skillMd)}: body uses Claude-only feature: ${label}`);
 	}
-	if (!meta.name) errs.push(`${rel(skillMd)}: missing \`name\` in frontmatter`);
-	if (!meta.description)
+
+	if (!meta.name) {
+		errs.push(`${rel(skillMd)}: missing \`name\` in frontmatter`);
+	} else if (!SKILL_NAME_RE.test(meta.name) || meta.name.length > 64) {
+		errs.push(
+			`${rel(skillMd)}: \`name\` must be a lowercase-hyphen slug of <=64 chars (got '${meta.name}')`,
+		);
+	}
+
+	if (!meta.description) {
 		errs.push(`${rel(skillMd)}: missing \`description\` in frontmatter`);
+	} else if (meta.description.length > 250) {
+		errs.push(
+			`${rel(skillMd)}: \`description\` must be <=250 chars (got ${meta.description.length})`,
+		);
+	}
 	return errs;
 }
 
@@ -312,6 +385,7 @@ function syncAgents(): string[] {
 		const { meta, body } = parseMd(mdPath);
 		const tomlName = `${mdName.slice(0, -3)}.toml`;
 		const tomlPath = join(CODEX_AGENTS, tomlName);
+		assertNotSymlink(tomlPath);
 		const fresh = renderToml(meta, body, rel(mdPath));
 		const current = existsSync(tomlPath)
 			? readFileSync(tomlPath, "utf-8")

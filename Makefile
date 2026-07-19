@@ -198,7 +198,13 @@ file_len_check: ## Check TS/RS files don't exceed max line count
 sync-agent-config: ## Sync Claude <-> Codex skills & subagents (regenerates symlinks and .codex/agents/*.toml)
 	@bun run scripts/sync_agent_config.ts
 
-ci: fmt lint knip audit link-check test file_len_check ## Run all CI checks
+.PHONY: sync-agent-config-check
+sync-agent-config-check: ## Fail if Claude <-> Codex config is out of sync (drift gate)
+	@echo "$(YELLOW)🔍 Checking Claude <-> Codex config sync...$(RESET)"
+	@bun run scripts/sync_agent_config.ts --check
+	@echo "$(GREEN)✅ Agent config in sync.$(RESET)"
+
+ci: fmt lint knip audit link-check test file_len_check sync-agent-config-check ## Run all CI checks
 	@echo "$(GREEN)✅ CI checks completed.$(RESET)"
 
 
