@@ -21,7 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout code
-      uses: actions/checkout@v6
+      uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
     - name: Validate sections
       run: |
@@ -31,7 +31,7 @@ jobs:
           echo "Error: $FILE not found."
           exit 1
         fi
-        
+
         MISSING=0
         for section in "${REQUIRED_SECTIONS[@]}"; do
           if ! grep -q "^## $section" "$FILE"; then
@@ -39,7 +39,7 @@ jobs:
             MISSING=1
           fi
         done
-        
+
         if [ $MISSING -eq 1 ]; then
           exit 1
         fi
