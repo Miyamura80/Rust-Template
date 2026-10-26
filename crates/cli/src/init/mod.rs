@@ -171,8 +171,11 @@ fn build_config(opts: &InitOptions) -> Result<Config> {
     if let Some(path) = &opts.config_path {
         let text = std::fs::read_to_string(path)
             .with_context(|| format!("reading config file {}", path.display()))?;
-        let file: FileConfig =
-            serde_yaml::from_str(&text).with_context(|| "parsing --config YAML")?;
+        let file: FileConfig = serde_saphyr::from_str_with_options(
+            &text,
+            serde_saphyr::options! { strict_booleans: true },
+        )
+        .with_context(|| "parsing --config YAML")?;
         return config_from_file(file);
     }
 
