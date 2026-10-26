@@ -31,7 +31,7 @@ import sys
 from pathlib import PurePosixPath
 
 DIGEST = re.compile(r"@sha256:[0-9a-f]{64}$")
-COMMIT_SHA = re.compile(r"^[^@\s]+@[0-9a-f]{40}$")
+COMMIT_SHA = re.compile(r"^[^@\s/]+/[^@\s]+@[0-9a-f]{40}$")  # owner/repo[/path]@<sha>
 INSTRUCTION = re.compile(r"^\s*(?P<cmd>[A-Za-z]+)\s+(?P<args>.*)$")
 ARG_DEFAULT = re.compile(r"^(?P<name>[A-Za-z_][A-Za-z0-9_]*)=(?P<value>\S+)$")
 VARIABLE = re.compile(
@@ -39,17 +39,30 @@ VARIABLE = re.compile(
 )
 COPY_FROM = re.compile(r"--from=(?P<ref>\S+)", re.IGNORECASE)
 MOUNT_FROM = re.compile(r"--mount=\S*?\bfrom=(?P<ref>[^\s,]+)", re.IGNORECASE)
-# A YAML key at the start of a line (block style) or after `{` / `,` (flow style,
-# `- { uses: ... }`), optionally quoted, with optional space before the colon.
-YAML_KEY = r"""(?:^\s*(?:-\s*)?|[{,]\s*)["']?"""
+# A YAML key, optionally quoted, with optional space before the colon. Keys after `{`
+# or `,` count only on a flow-collection line (`- { uses: ... }`, `steps: [{ ... }]`),
+# so a brace or comma inside a `run:` string is not mistaken for a key.
+BLOCK_KEY = r"""^\s*(?:-\s*)?["']?"""
+FLOW_KEY = r"""(?:^\s*(?:-\s*)?|[{,]\s*)["']?"""
+FLOW_LINE = re.compile(r"""^\s*(?:-\s*)?(?:["']?[\w.-]+["']?\s*:\s*)?[\[{]""")
 YAML_VALUE = r"""["']?\s*:\s*(?P<ref>[^\s#,{}]+)"""
-USES = re.compile(YAML_KEY + "uses" + YAML_VALUE)
-IMAGE = re.compile(YAML_KEY + "(?P<key>image|container)" + YAML_VALUE)
-LATEST_INPUT = re.compile(
-    YAML_KEY + r"""(?P<key>[\w-]*version)["']?\s*:\s*["']?latest["']?\s*(?:[,}#].*)?$""",
-    re.IGNORECASE,
-)
+
+
+def key_patterns(key: str) -> tuple[re.Pattern[str], re.Pattern[str], re.Pattern[str]]:
+    return (
+        re.compile(key + "uses" + YAML_VALUE),
+        re.compile(key + "(?P<key>image|container)" + YAML_VALUE),
+        re.compile(
+            key + r"""(?P<key>[\w-]*version)["']?\s*:\s*["']?latest["']?\s*(?:[,}#].*)?$""",
+            re.IGNORECASE,
+        ),
+    )
+
+
+BLOCK_PATTERNS = key_patterns(BLOCK_KEY)
+FLOW_PATTERNS = key_patterns(FLOW_KEY)
 EXEMPT = re.compile(r"^\s*#\s*pin-exempt:\s*\S")
+PARSER_DIRECTIVE = re.compile(r"^#\s*(?P<name>[A-Za-z]+)\s*=\s*(?P<value>\S*)\s*$")
 
 
 def list_files() -> list[str]:
@@ -90,8 +103,20 @@ def mutable_image(ref: str) -> str | None:
     return "tag is mutable; append @sha256:<digest>"
 
 
+def escape_char(lines: list[str]) -> str:
+    """The line-continuation character set by a leading `# escape=` parser directive."""
+    for raw in lines:
+        m = PARSER_DIRECTIVE.match(raw.strip())
+        if not m:
+            break  # directives are only honoured before the first non-directive line
+        if m["name"].lower() == "escape" and m["value"] in {"\\", "`"}:
+            return m["value"]
+    return "\\"
+
+
 def instructions(lines: list[str]) -> list[tuple[int, bool, str]]:
     """Join continuation lines into (first lineno, pin-exempt, instruction text)."""
+    escape = escape_char(lines)
     out: list[tuple[int, bool, str]] = []
     exempt = False
     buf: list[str] = []
@@ -108,14 +133,16 @@ def instructions(lines: list[str]) -> list[tuple[int, bool, str]]:
             start = lineno
         elif not stripped or stripped.startswith("#"):
             continue  # blank and comment lines inside a continuation are dropped by Docker
-        if stripped.endswith("\\"):
-            buf.append(stripped[:-1])
+        # Docker drops only the escape and the newline, keeping the next line's indent
+        part = stripped if not buf else raw.rstrip()
+        if part.endswith(escape):
+            buf.append(part[:-1])
             continue
-        buf.append(stripped)
-        out.append((start, exempt, " ".join(buf)))
+        buf.append(part)
+        out.append((start, exempt, "".join(buf)))
         buf, exempt = [], False
     if buf:
-        out.append((start, exempt, " ".join(buf)))
+        out.append((start, exempt, "".join(buf)))
     return out
 
 
@@ -196,7 +223,7 @@ def container_problem(key: str, ref: str, is_action_metadata: bool) -> str | Non
         # (docker://<image> or a bare name), which must be pinned like any other
         if ref.startswith("docker://"):
             ref = ref.removeprefix("docker://")
-        elif is_dockerfile(ref):
+        elif ref.endswith(("Dockerfile", "dockerfile")):  # the runner's own rule
             return None
     if "${{" in ref:
         return (
@@ -210,15 +237,17 @@ def check_actions_file(path: str, lines: list[str]) -> list[str]:
     errors: list[str] = []
     is_action_metadata = PurePosixPath(path).stem == "action"
     for lineno, line in enumerate(lines, 1):
-        if m := USES.search(line):
+        uses_re, image_re, latest_re = FLOW_PATTERNS if FLOW_LINE.match(line) else BLOCK_PATTERNS
+        # Every match counts: a flow-style line can hold several steps or keys.
+        for m in uses_re.finditer(line):
             ref = m["ref"].strip("\"'")
             if why := uses_problem(ref):
                 errors.append(f"{path}:{lineno}: uses {ref}: {why}")
-        elif m := LATEST_INPUT.search(line):
+        if m := latest_re.search(line):
             errors.append(f"{path}:{lineno}: {m['key']}: latest is mutable; name an exact version")
-        elif m := IMAGE.search(line):
-            if lineno > 1 and EXEMPT.match(lines[lineno - 2]):
-                continue
+        if lineno > 1 and EXEMPT.match(lines[lineno - 2]):
+            continue  # pin-exempt covers images only, so it is checked after uses
+        for m in image_re.finditer(line):
             key, ref = m["key"], m["ref"].strip("\"'")
             if why := container_problem(key, ref, is_action_metadata):
                 errors.append(f"{path}:{lineno}: {key} {ref}: {why}")
