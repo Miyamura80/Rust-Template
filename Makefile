@@ -146,7 +146,7 @@ test_flaky: ## Repeat fast tests to detect flaky tests
 ########################################################
 
 ### Code Quality
-.PHONY: fmt lint knip audit link-check file_len_check import_lint check_ai_writing sync-agent-config ci
+.PHONY: fmt lint knip audit link-check file_len_check import_lint check_ai_writing sync-agent-config lint_immutable_refs ci
 
 fmt: ## Format code with Biome and rustfmt
 	@echo "$(YELLOW)✨ Formatting and linting with Biome...$(RESET)"
@@ -215,7 +215,12 @@ sync-agent-config-check: ## Fail if Claude <-> Codex config is out of sync (drif
 	@bun run scripts/sync_agent_config.ts --check
 	@echo "$(GREEN)✅ Agent config in sync.$(RESET)"
 
-ci: fmt lint knip audit link-check test file_len_check import_lint check_ai_writing sync-agent-config-check ## Run all CI checks
+lint_immutable_refs: ## Fail if a Dockerfile or GitHub Actions file uses a mutable image tag or action ref
+	@echo "$(YELLOW)🔍 Checking for mutable image/action references...$(RESET)"
+	@python3 scripts/check_immutable_refs.py
+	@echo "$(GREEN)✅ All non-exempt references are pinned.$(RESET)"
+
+ci: fmt lint knip audit link-check test file_len_check import_lint check_ai_writing sync-agent-config-check lint_immutable_refs ## Run all CI checks
 	@echo "$(GREEN)✅ CI checks completed.$(RESET)"
 
 

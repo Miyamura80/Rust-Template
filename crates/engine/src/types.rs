@@ -174,12 +174,7 @@ pub struct ScenarioResult {
 // ---------------------------------------------------------------------------
 
 pub fn current_os() -> &'static str {
-    match std::env::consts::OS {
-        "macos" => "macos",
-        "linux" => "linux",
-        "windows" => "windows",
-        other => other,
-    }
+    std::env::consts::OS
 }
 
 pub fn detect_headless() -> bool {
